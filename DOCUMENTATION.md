@@ -99,7 +99,7 @@ Required for resource pack and datapack features to work properly:
 {
   "pack": {
     "pack_format": 48,
-    "supported_formats": { "min_inclusive": 42, "max_inclusive": 1000 },
+    "supported_formats": { "min_inclusive": 38, "max_inclusive": 1000 },
     "description": "My More Villagers Pack"
   }
 }
