@@ -1,0 +1,37 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+issueTrackerURL = "https://github.com/frikinjay/villagerapi/issues"
+license = "LGPL3"
+
+[[mods]]
+modId = "villagerapi"
+version = "${version}"
+displayName = "VillagerAPI"
+authors = "frikinjay"
+description = '''
+API to add new villager jobs, trades, and villager biome types!
+'''
+logoFile = "icon.png"
+
+[[dependencies.villagerapi]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.villagerapi]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.11]"
+ordering = "AFTER"
+side = "BOTH"
+
+[[mixins]]
+config = "villagerapi.mixins.json"
+
+[[mixins]]
+config = "villagerapi-neoforge.mixins.json"
+
+[[accessTransformers]]
+file="META-INF/accesstransformer.cfg"

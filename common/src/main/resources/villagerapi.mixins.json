@@ -1,0 +1,21 @@
+{
+  "required": true,
+  "package": "com.frikinjay.villagerapi.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "minVersion": "0.8",
+  "client": [
+  ],
+  "mixins": [
+    "EmeraldsForVillagerTypeItemMixin",
+    "GiveGiftToHeroAccessor",
+    "GiveGiftToHeroMixin",
+    "PoiTypesInvoker",
+    "VillagerMixin",
+    "VillagerTradesRedirectMixin",
+    "VillagerTypeAccessor",
+    "VillagerTypeMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

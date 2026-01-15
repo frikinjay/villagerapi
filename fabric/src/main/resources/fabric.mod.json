@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "villagerapi",
+  "version": "${version}",
+  "name": "VillagerAPI",
+  "accessWidener": "villagerapi.accesswidener",
+  "description": "API to add new villager jobs, trades, and villager biome types!",
+  "authors": [
+    "frikinjay"
+  ],
+  "contact": {
+    "homepage": "https://github.com/frikinjay/villagerapi"
+  },
+  "license": "LGPL3",
+  "icon": "icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.frikinjay.villagerapi.fabric.VillagerAPIFabric"
+    ],
+    "client": [
+      "com.frikinjay.villagerapi.fabric.client.VillagerAPIFabricClient"
+    ],
+    "fabric-datagen": [
+
+    ]
+  },
+  "mixins": [
+    "villagerapi-fabric.mixins.json",
+    "villagerapi.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.18.1",
+    "minecraft": "1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+
+  }
+}
