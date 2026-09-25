@@ -50,6 +50,7 @@ This page covers the pack format, how packs are loaded, and the parts that tend 
 VillagerAPI looks for packs in two places:
 
 - **The `villagerpacks` folder** in your instance directory. A pack there can be a plain folder, a `.zip` or a `.jar`.
+- The `resourcepacks` folder in your instance directory. Any folder, `.zip` or `.jar` there that has a `villagerapi_config.json` at its root is loaded as a villager pack, exactly like one in `villagerpacks`. Ordinary resource packs in the same folder are ignored. The pack will also appear in the Resource Packs screen, but it doesn't need to be enabled there to work.
 - **Inside mod jars.** Any installed mod that has a `villagerapi_config.json` at the root of its jar is treated as a villager pack. This is how a mod like More Villagers ships its content.
 
 Both kinds work the same way once they are found.
