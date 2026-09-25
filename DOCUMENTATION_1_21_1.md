@@ -267,6 +267,8 @@ A POI type is what makes a block a job site. The file name is the POI ID and is 
 
 All block states of the block count as the job site. If the block doesn't exist, a warning is logged on server start and the profession using it won't work.
 
+Blocks from [workstation files](#workstations) are always registered before POI types, in every pack, so a POI can point at any villager pack's workstation. It can also point at a block another mod registers in its own code. On Fabric that mod may not have registered its blocks yet when VillagerAPI registers the POI. VillagerAPI registers the POI anyway, and links it to its block the moment the block is registered, logging `Linked POI type ... to block ...`. Mods don't need to do anything for this. On NeoForge blocks are always registered first.
+
 Unemployed villagers only look for POIs listed in the `acquirable_job_site` tag. You have to add yours there, see [Datapack Content You Still Need](#datapack-content-you-still-need).
 
 ---
@@ -413,6 +415,8 @@ You can also point map trades straight at vanilla's own structure tags, like `mi
 Trades are written per profession and per level. The file name doesn't matter. The `profession` field does.
 
 On 1.21.1 each trade can be written in either of two formats: the current format shown here, with `wants` and `gives`, or the older format with `buy_a` and `sell` that earlier versions of VillagerAPI used. You can mix both in the same file. See [Older trade format](#older-trade-format).
+
+If you also make a pack for Minecraft 26.1 or newer, keep separate trade files for it. Newer versions only accept the `wants` / `gives` format, so an old-format file copied across stops the world from loading.
 
 ```json
 {
@@ -938,6 +942,8 @@ Without this, unemployed villagers will walk right past your workstation.
 
 Keep `replace` set to `false` so you don't wipe out vanilla's and other mods' job sites.
 
+This is a POI type tag, so every entry must be a POI type ID, like `morevillagers:miner`, never a block ID. A POI that uses a block from another mod, say `waystones:waystone`, still goes in the tag under its own POI ID. If the tag lists anything that isn't a registered POI type, Minecraft refuses to load the whole tag. That also breaks `minecraft:village`, which includes it, and then no villager in the world can take any job, vanilla ones included. The log shows `Couldn't load tag minecraft:acquirable_job_site as it is missing following references`.
+
 ### Everything else
 
 - Structure tags for your explorer maps: `data/{namespace}/tags/worldgen/structure/`
@@ -999,10 +1005,11 @@ The report is there to help you. It doesn't stop a pack from loading. A pack wit
 Other lines worth looking for:
 
 - The list of found packs, in order, printed right after validation.
-- `Merged into level ... of '...'` and `Replaced level ... of '...'`, one line per profession level that villager packs changed, with the number of trades and the cap if there is one.
-- `Built villagerpack trades for N profession(s): [...]`, listing every profession that villager packs changed.
+- `Villagerpack trades for '...': defined N levels`, one line per profession villager packs changed. It says how many levels were defined (the profession had no trades there before), merged into (added to existing trades) or replaced. With debug logging on for `villagerapi`, there's also one line per level with the number of trades and the cap if there is one.
+- `Built villagerpack trades for N profession(s): [...]`, listing every profession villager packs changed.
 - `Profession '...' is not registered, its villagerpack trades are ignored`
 - `VillagerAPI failed to ...`, if one of the steps that runs when a world starts failed.
+- `Linked POI type ... to block ...`, when a POI whose block didn't exist yet was connected to it once the block was registered.
 - `Villagerpack ... is ignored: its namespace ... is already used by ...`
 
 ---
@@ -1021,6 +1028,8 @@ Other lines worth looking for:
 - "Unbound tags" naming one of your structure tags means the real tag file under `data/{namespace}/tags/worldgen/structure/` is missing or in the wrong folder.
 
 **Villagers ignore the workstation**
+- The POI's block comes from another mod and never got linked. Look for `Linked POI type` in the log. If it's missing, check that the block ID is right and that the mod adding it is installed.
+- `acquirable_job_site` lists a block ID instead of a POI ID, so the whole tag failed to load. See [Acquirable job sites](#acquirable-job-sites).
 - The POI isn't in `acquirable_job_site`.
 - The profession's `poi_type` isn't the POI's file name.
 - The POI's `block` ID is wrong. Look for "references missing block" in the log.
@@ -1089,3 +1098,13 @@ In a development environment, your resources may be loaded from a different clas
 To handle merging, `replace`, `trade_list_amount`, `trade_list_weight`, `trade_list_max` and biome trades, VillagerAPI takes over trade picking for the profession levels that villager packs change, and only those. It hooks into the start of `Villager.updateTrades`. Every other level, including other mods' professions that no villager pack touches and the wandering trader, is picked by the game as normal. If anything goes wrong while picking, VillagerAPI logs it and hands the level back to the game.
 
 VillagerAPI doesn't write its trades into `VillagerTrades.TRADES`. Mods that read that table directly, for example to display trades, see the original trades and not the ones from villager packs.
+
+### Blocks your POIs use
+
+A villager pack's POI types can use blocks your mod registers in its own code, on both loaders, with nothing extra to set up.
+
+On Fabric, mods start up one after another, and VillagerAPI may register your pack's POI types before your mod has registered its blocks. VillagerAPI registers those POIs straight away, so their IDs exist and tags like `acquirable_job_site` always load. It then watches block registration and links each POI to its block as soon as that block is added, and logs `Linked POI type ... to block ...`. If a block somehow still isn't linked by the time a world starts, VillagerAPI tries once more then.
+
+On NeoForge, deferred registers add all blocks before any POI types, so POIs have their blocks from the start.
+
+If a POI's block doesn't exist at all, the world-start check logs `POI type '...' references missing block ...` and that profession won't work.
