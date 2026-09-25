@@ -133,7 +133,7 @@ If you leave it out, VillagerAPI builds one from the folder, zip or mod name. It
 
 Two packs cannot share a namespace. If they do, VillagerAPI keeps one and ignores the other completely. The ignored pack loses its registrations, trades, creative tab, datapack and resource pack.
 
-The pack that is kept is picked the same way every time. Packs in the `villagerpacks` folder win over packs inside mods. Within each group, packs are compared in alphabetical order of their file or folder name (mod ID for mod packs). The log shows an error naming both packs, for example:
+The pack that is kept is picked the same way every time. Packs in `villagerpacks` win over packs in `resourcepacks`, which win over packs inside mods. Within each group, packs are compared in alphabetical order of their file or folder name (mod ID for mod packs). The log shows an error naming both packs, for example:
 
 ```
 Villagerpack 'MoreVillagersAddon.zip' in villagerpacks/ is ignored: its namespace 'morevillagers' is already used by mod 'morevillagers'. Each villagerpack must use a unique namespace in its villagerapi_config.json
