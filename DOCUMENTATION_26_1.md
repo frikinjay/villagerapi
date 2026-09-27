@@ -25,6 +25,11 @@ This page covers the pack format, how packs are loaded, and the parts that tend 
 - [Biome Trades](#biome-trades)
 - [Hero Gifts](#hero-gifts)
 - [Biome Mappings](#biome-mappings)
+- [Village Types](#village-types)
+- [Village Structures](#village-structures)
+- [Repurposed Structures Compatibility](#repurposed-structures-compatibility)
+- [Generated Village Packs](#generated-village-packs)
+- [Structure Palette Tools](#structure-palette-tools)
 - [Translations and Textures](#translations-and-textures)
 - [Datapack Content You Still Need](#datapack-content-you-still-need)
 - [Reference Lists](#reference-lists)
@@ -73,7 +78,9 @@ villagerpacks/my_pack/
 │   ├── biome_trades/              trades limited to certain villager types
 │   ├── gifts/                     hero of the village gifts
 │   ├── structure_tags/            explorer map definitions
-│   └── biome_mappings/            biome to villager type mappings
+│   ├── biome_mappings/            biome to villager type mappings
+│   ├── village_types/             new villages copied from existing ones
+│   └── village_structures/        houses added to villages
 ├── assets/{namespace}/
 │   ├── lang/en_us.json
 │   ├── blockstates/
@@ -206,7 +213,8 @@ Order matters for three things:
 
 - **Trades.** When several packs add trades to the same profession level, they are combined from the top of the order down, and a pack that replaces the level cuts off everything below it. See [Overriding Vanilla and Other Mods' Trades](#overriding-vanilla-and-other-mods-trades).
 - **Registry content with the same file name.** If two packs both have, for example, `villagers/professions/miner.json`, only the higher pack's file is used. A warning is logged for the one that was skipped.
-- **Biome mappings with the same file name**, for the same reason.
+- **Biome mappings.** Every pack's mappings for a biome are combined from the top of the order down, and a pack with `"replace": true` for a biome cuts off the packs below it. See [Biome Mappings](#biome-mappings).
+- **Village types with the same ID.** Only the highest pack's definition is used, and the others are skipped with a warning.
 
 Plain files in your `data/` folder are not reordered by this file. Those follow Minecraft's normal datapack order, which you can change in game with `/datapack`.
 
@@ -296,6 +304,10 @@ Textures:
 
 - `assets/{namespace}/textures/entity/villager/type/{name}.png`
 - `assets/{namespace}/textures/entity/zombie_villager/type/{name}.png`
+- `assets/{namespace}/textures/entity/villager/baby/{name}.png`
+- `assets/{namespace}/textures/entity/zombie_villager/baby/{name}.png`
+
+Since Minecraft 26.1, baby villagers have their own textures, so each type needs the two `baby/` textures as well. Without them, baby villagers of the type show the missing texture.
 
 Each can have a `.png.mcmeta` next to it to control how the hat layer is drawn:
 
@@ -858,24 +870,215 @@ It's harmless to include this file on Fabric too, so one pack can serve both loa
 
 **Path:** `villagers/biome_mappings/{any name}.json`
 
-Decides which villager type spawns in which biome.
+Decides which villager types spawn in which biomes. A biome can have several types, each with a weight, and a villager spawning there picks one at random.
+
+```json
+{
+  "biomes": [
+    { "biome": "minecraft:badlands", "villager_type": "morevillagers:badlands", "replace": true },
+    { "biome": "minecraft:wooded_badlands", "villager_type": "morevillagers:badlands", "weight": 3 },
+    { "biome": "#minecraft:is_jungle", "villager_type": "morevillagers:jungle_dweller", "weight": 6 }
+  ]
+}
+```
+
+| Field | Required | Default | Notes |
+|-------|----------|---------|-------|
+| `biome` | Yes | - | A biome ID, or a biome tag starting with `#`. Tags are resolved when a world starts, so they include biomes other mods add to them. |
+| `villager_type` | Yes | - | The villager type. Without a namespace it uses your pack's namespace. `type` works as well. |
+| `weight` | No | 1 | How likely this type is compared to the other types for the same biome. |
+| `replace` | No | `false` | Stops villager packs further down the [pack order](#pack-order-and-villagerpacks_orderjson) from adding types for this biome. |
+
+### How the types for a biome are picked
+
+- Every villager pack that maps a biome adds its types to that biome's pool, with their weights. Packs are combined from the top of the order down, and a pack with `"replace": true` for a biome is the last one included for it.
+- Vanilla's own type for the biome is never part of the pool once any pack maps the biome. So desert villagers don't appear in a biome your packs map, unless you map `minecraft:desert` yourself.
+- A type that another mod puts on the biome, through its own code or through a data map, stays in the pool with weight 1. `"replace": true` removes it as well.
+- Biomes that no pack maps are left completely alone.
+- Two packs mapping the same type to the same biome add their weights together.
+
+### Villages and other structures
+
+Villagers placed by structures, such as villages, carry a villager type in the structure file. In a biome that a villager pack maps, VillagerAPI replaces that stored type with one picked from the biome's pool. This is what makes villagers in a [generated badlands village](#village-types) badlands villagers instead of desert ones. In biomes no pack maps, structure villagers keep their stored type, the same as vanilla.
+
+### Older format
+
+The older format, with biomes as keys, still works. Every entry in it counts as `"replace": true`, which is how it behaved before:
 
 ```json
 {
   "biomes": {
-    "minecraft:jungle": "morevillagers:jungle_dweller",
-    "minecraft:bamboo_jungle": "morevillagers:jungle_dweller",
-    "minecraft:desert": "morevillagers:desert_nomad"
+    "minecraft:badlands": "morevillagers:badlands",
+    "minecraft:eroded_badlands": "morevillagers:badlands"
   }
 }
 ```
 
-- Mappings are applied when the server starts. They take priority over vanilla's own biome to type assignments.
-- Any biome works, including modded ones. Any villager type works, including vanilla ones.
-- If a villager type doesn't exist, that line is skipped with a warning.
-- You can split mappings over several files. If two files map the same biome, the last one loaded wins.
-- Two packs with a mapping file of the same name follow pack order, and only the higher pack's file is used.
-- Villagers that already exist keep their type. Mappings only affect villagers spawned or generated afterwards.
+### Notes
+
+- Any biome works, including modded ones. Any villager type works, including vanilla and other mods' types.
+- A villager type or biome that doesn't exist is skipped with a warning.
+- Mappings are applied when a world starts. Villagers that already exist keep their type.
+- The same random pick is used when villagers breed, since vanilla gives half of all babies the biome's type.
+
+---
+
+## Village Types
+
+**Path:** `villagers/village_types/{folder}/{any name}.json`
+
+Adds a new kind of village, made by copying an existing one and optionally changing some of its structures. For example, a badlands village built from the desert village with red sandstone instead of sandstone.
+
+```json
+{
+  "namespace": "morevillagers",
+  "name": "village_badlands",
+  "copy_from": "minecraft:village_desert",
+  "biomes": ["#minecraft:is_badlands"],
+  "weight": 1
+}
+```
+
+| Field | Required | Default | Notes |
+|-------|----------|---------|-------|
+| `name` | Yes | - | The village's structure ID, together with `namespace`. |
+| `namespace` | No | Pack namespace | |
+| `copy_from` | Yes | - | The village to copy. Vanilla's are `minecraft:village_plains`, `village_desert`, `village_savanna`, `village_snowy` and `village_taiga`. Other mods' jigsaw villages work too. |
+| `biomes` | Yes | - | Biome IDs and `#tags` the village generates in. Biomes from mods that aren't installed are skipped. |
+| `weight` | No | 1 | The village's weight in `minecraft:villages`. Each vanilla village has weight 1. |
+
+### Changing the copied structures
+
+Next to the JSON, make a folder with the same name as `name`. Any `.nbt` file in it replaces the copied structure with the same relative path. The paths are the same as in the source village's structure folder, which for the desert village is `data/minecraft/structure/village/desert/`:
+
+```
+villagers/village_types/badlands/
+├── village_badlands.json
+└── village_badlands/
+    ├── houses/desert_small_house_1.nbt
+    ├── streets/straight_01.nbt
+    └── zombie/houses/desert_small_house_1.nbt
+```
+
+- Structures you don't replace are copied from the source village unchanged.
+- The abandoned "zombie" variants live in `zombie/`, so replacing `houses/x.nbt` doesn't change `zombie/houses/x.nbt`.
+- A replacement that doesn't match any structure in the source village is listed in the log.
+- The [structure palette tools](#structure-palette-tools) can make block-swapped copies of a whole village folder for you.
+
+### How copying works
+
+The village's pieces are joined by jigsaw blocks, and every jigsaw block names the pool it connects to, for example `minecraft:village/desert/houses`. VillagerAPI copies every pool and structure that belongs to the source village, and rewrites every one of those names, including inside your replacement structures. So `minecraft:village/desert/houses` becomes `morevillagers:village/badlands/houses`. Pools shared between villages, like `minecraft:village/common/cats`, stay shared.
+
+The new village uses the folder `village/<name without "village_">/`. For `village_badlands` that's `morevillagers:village/badlands/...`.
+
+### Where it generates
+
+- The village is added to vanilla's `minecraft:villages` structure set when a world starts. Villages in that set share the same spacing, and in each spot a village could generate, one of the village types whose biome matches is picked by weight. So your village generates as often as vanilla villages do in its biomes.
+- It is also added to the `#minecraft:village` structure tag, so `/locate` and other village checks find it.
+- It only generates in new chunks.
+
+Villagers in the village get their type from the biome, through [biome mappings](#biome-mappings). Map the village's biomes to your villager type, or the villagers keep the type stored in the copied structures.
+
+---
+
+## Village Structures
+
+**Path:** `villagers/village_structures/{folder}/{any name}.json`
+
+Adds houses to a village: a vanilla village, another mod's village, or a village from [Village Types](#village-types).
+
+```json
+{
+  "namespace": "morevillagers",
+  "village_type": "minecraft:village_plains",
+  "houses": {
+    "plains_woodworker": { "weight": 10 },
+    "plains_florist": { "weight": 10, "processors": "minecraft:mossify_10_percent" }
+  },
+  "zombie_houses": {
+    "plains_woodworker": { "weight": 2 }
+  }
+}
+```
+
+The structure files go next to the JSON:
+
+```
+villagers/village_structures/plains/
+├── plains_structures.json
+├── houses/plains_woodworker.nbt
+└── zombie_houses/plains_woodworker.nbt
+```
+
+| Field | Required | Default | Notes |
+|-------|----------|---------|-------|
+| `village_type` | Yes | - | The village to add to. Without a namespace it uses your pack's namespace. |
+| `namespace` | No | Pack namespace | Namespace the house structures are saved under. |
+| `houses` | No | - | Houses for the normal village, by file name without `.nbt`. |
+| `zombie_houses` | No | - | Houses for the abandoned zombie variant. |
+
+Each house takes:
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `weight` | 1 | How often the house is picked, compared to the other houses in the village. Between 1 and 150. Vanilla houses mostly use 1 to 3. |
+| `processors` | The first house's processors in that pool | A processor list ID, for example `minecraft:mossify_10_percent` or `minecraft:zombie_desert`. |
+| `element_type` | `legacy` | `legacy` skips the structure's air blocks, like vanilla village houses. `single` also places air, which clears terrain inside the house. |
+| `location` | - | Use an existing structure instead of a file, for example `morevillagers:village/plains/plains_woodworker`. No `.nbt` file is needed then. |
+| `max_count` | - | Only for [Repurposed Structures](#repurposed-structures-compatibility) villages: the most of this house one village can have. |
+
+- Only listed houses are added. `.nbt` files that aren't listed are skipped with a warning.
+- Houses added to a village from Village Types go straight into that village's generated pools. Jigsaw blocks in them that point at the source village's pools are rewritten, the same as the copied structures.
+- Houses added to vanilla or other mods' villages are added to those villages' pools when a world starts. The same house is never added twice.
+
+---
+
+## Repurposed Structures Compatibility
+
+When a `village_structures` file targets a Repurposed Structures village, for example `repurposed_structures:village_badlands`, VillagerAPI writes Repurposed Structures' own compatibility files instead of changing the pools itself:
+
+- `data/{namespace}/rs_pool_additions/...`, which adds the houses to the village's `houses` or `zombie/houses` pool.
+- `data/{namespace}/rs_pieces_spawn_counts/...`, for houses that set `max_count`.
+
+```json
+{
+  "namespace": "morevillagers",
+  "village_type": "repurposed_structures:village_bamboo",
+  "houses": {
+    "florist": {
+      "location": "morevillagers:village/bamboo/florist",
+      "weight": 4,
+      "processors": "repurposed_structures:villages/bamboo/mossify",
+      "max_count": 1
+    }
+  }
+}
+```
+
+Repurposed Structures applies these files itself, and without it installed they're simply never read, so the same pack works with or without it. If you already ship hand-written `rs_pool_additions` or `rs_pieces_spawn_counts` files for the same houses, remove them, or the houses are added twice.
+
+---
+
+## Generated Village Packs
+
+Everything VillagerAPI makes for villages, meaning copied structures, pools, structure files, biome tags, house structures and Repurposed Structures files, goes into a separate datapack for each villager pack:
+
+- Pack ID: `villagerpack:<namespace>/generated`
+- Folder: `.villagerapi/generated/<namespace>/` in your game directory. It is rebuilt every time datapacks load, so don't edit it by hand, but it's useful for checking what was generated.
+
+These packs sit at the bottom of the datapack list. Any datapack or mod that provides the same file wins, and a warning in the log names the pack that overrides it. There's a second warning when a village type was copied from vanilla files that another pack changes, since those changes aren't in the copy.
+
+---
+
+## Structure Palette Tools
+
+Two Python scripts that make block-swapped copies of structure files, for example turning the desert village into a badlands one. They only need Python 3, with no extra packages. You can download them with the villager pack generator on the More Villagers website.
+
+1. Copy both scripts into a folder of structures, for example a copy of `data/minecraft/structure/village/desert` from the Minecraft jar, and run `python villager_palette_scan.py`. It writes `block_replacements.json`, listing every block the structures use.
+2. Change the right-hand side of any block you want swapped, for example `"minecraft:sand": "minecraft:red_sand"`. Properties like `facing` are kept, so swap stairs for stairs and slabs for slabs.
+3. Run `python villager_palette_apply.py`. The swapped copies are written to `generated_structures/` with the same folder layout, and the originals aren't changed.
+
+`block_replacements.json` also has `replace_jigsaw_final_states`, which swaps the block each jigsaw becomes after generation, and `rename_files`, for example `{"desert_": "badlands_"}`. Leave `rename_files` empty when making replacements for a Village Types folder, since those have to keep their original names.
 
 ---
 
@@ -911,6 +1114,7 @@ Other language files go next to `en_us.json` with their usual names, like `de_de
 | Profession overlay | `assets/{namespace}/textures/entity/villager/profession/{name}.png` | 64x64 |
 | Villager type | `assets/{namespace}/textures/entity/villager/type/{name}.png` | 64x64 |
 | Zombie villager versions | same paths under `entity/zombie_villager/` | 64x64 |
+| Baby villager and zombie villager type | `.../villager/baby/{name}.png`, `.../zombie_villager/baby/{name}.png` | Same layout as the vanilla baby textures |
 | Map decoration | `assets/{namespace}/textures/map/decorations/{name}.png` | 8x8 |
 
 Villager textures follow the vanilla layout. The vanilla textures are a good starting point: https://minecraft.wiki/w/List_of_entity_textures#Mob_overlays
@@ -1009,6 +1213,12 @@ Other lines worth looking for:
 - The list of found packs, in order, printed right after validation.
 - `Villagerpack trades for '...': defined N levels`, one line per profession villager packs changed. It says how many levels were defined (the profession had no trades there before), merged into (added to existing trades) or replaced. With debug logging on for `villagerapi`, there's also one line per level with the number of trades and the cap if there is one.
 - `Built villagerpack trades for N profession(s): [...]`, listing every profession villager packs changed.
+- `Registered villager type mappings for N biome(s) from villagerpacks`
+- `Generated village type ... from ... (N pools, N structures, N added houses)`, one line per village type.
+- `Added N villagerpack village type(s) to minecraft:villages` and `Added N villagerpack house(s) to existing village pools`
+- `Prepared Repurposed Structures compat for N house(s) ...`
+- `Pack '...' overrides N village file(s) generated in '...'`, when another pack replaces generated village files. The other pack's versions are used.
+- `Village type ... was copied from vanilla files, but pack '...' changes N of those files`
 - `Could not find the existing trade set '...' ... this level was left unchanged`
 - `Linked POI type ... to block ...`, when a POI whose block didn't exist yet was connected to it once the block was registered.
 - `Villagerpack ... is ignored: its namespace ... is already used by ...`
@@ -1034,6 +1244,22 @@ Other lines worth looking for:
 
 **The world won't load and the log says "No key gives" or "No key wants"**
 - A trade file uses the older `buy_a` / `sell` format from the 1.21.1 version. Rewrite it with `wants` and `gives`. See [Trades](#trades).
+
+**A village type never generates**
+- Look for `Generated village type` in the log. If it's missing, look for errors about the village type file, `copy_from` or `biomes`.
+- Look for `Added N villagerpack village type(s) to minecraft:villages`. If there's a warning that the type isn't registered as a structure, a generated file failed to load, and the log has the reason.
+- It only generates in new chunks, and only in its `biomes`. Use `/locate structure <namespace>:<name>` in a new world.
+
+**A village has the wrong villagers**
+- Map the village's biomes to your villager type with [biome mappings](#biome-mappings). Without a mapping, villagers keep the type stored in the copied structures.
+
+**Added houses never appear**
+- The house isn't listed in the `houses` object, or the `.nbt` file name doesn't match. Both are logged.
+- The target village's pool couldn't be found. Look for `has no pool` in the log, and check `village_type`.
+- Weights are relative to the village's other houses. Vanilla houses mostly use 1 to 3, so a weight of 1 is rare in a big pool.
+
+**Houses appear twice in Repurposed Structures villages**
+- The pack still ships its own `rs_pool_additions` files for the same houses. Remove them, since VillagerAPI generates them now.
 
 **Villagers ignore the workstation**
 - The POI's block comes from another mod and never got linked. Look for `Linked POI type` in the log. If it's missing, check that the block ID is right and that the mod adding it is installed.
