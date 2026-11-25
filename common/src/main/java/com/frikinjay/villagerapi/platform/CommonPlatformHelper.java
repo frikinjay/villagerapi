@@ -26,6 +26,11 @@ public class CommonPlatformHelper {
     }
 
     @ExpectPlatform
+    public static Supplier<Item> registerMapItem(String namespace, String name, Supplier<Item> type) {
+        throw new AssertionError();
+    }
+
+    @ExpectPlatform
     public static Supplier<VillagerType> registerVillagerType(String namespace, String name, Supplier<VillagerType> type) {
         throw new AssertionError();
     }

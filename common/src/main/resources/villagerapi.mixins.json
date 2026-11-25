@@ -3,17 +3,19 @@
   "package": "com.frikinjay.villagerapi.mixin",
   "compatibilityLevel": "JAVA_21",
   "minVersion": "0.8",
-  "client": [
-  ],
+  "client": [],
   "mixins": [
-    "EmeraldsForVillagerTypeItemMixin",
+    "AbstractVillagerTradesMixin",
     "GiveGiftToHeroAccessor",
     "GiveGiftToHeroMixin",
     "PoiTypesInvoker",
-    "VillagerMixin",
-    "VillagerTradesRedirectMixin",
+    "SinglePoolElementAccessor",
+    "StructureSetAccessor",
+    "StructureTemplatePoolAccessor",
+    "VillagerStructureSpawnMixin",
     "VillagerTypeAccessor",
-    "VillagerTypeMixin"
+    "VillagerTypeMixin",
+    "WanderingTraderTradesMixin"
   ],
   "injectors": {
     "defaultRequire": 1

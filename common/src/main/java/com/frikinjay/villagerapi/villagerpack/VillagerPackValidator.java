@@ -4,6 +4,7 @@ import com.frikinjay.villagerapi.platform.CommonPlatformHelper;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import net.minecraft.SharedConstants;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -67,9 +68,34 @@ public class VillagerPackValidator {
 
             if (valid || !criticalFailure) {
                 LOGGER.info("Pack '{}' validation completed - Pack will load", packName);
-                if (!info.isEmpty()) {
-                    info.forEach((key, value) -> LOGGER.info("  - {}: {}", key, value));
+
+                // Output in specific order
+                String[] orderedKeys = {
+                        "Display Name",
+                        "Description",
+                        "Author",
+                        "Version",
+                        "Has villagers folder",
+                        "Namespace",
+                        "Has assets folder",
+                        "Asset namespaces",
+                        "Has data folder",
+                        "Data namespaces",
+                        "Pack format"
+                };
+
+                // First, output the ordered keys
+                for (String key : orderedKeys) {
+                    if (info.containsKey(key)) {
+                        LOGGER.info("  - {}: {}", key, info.get(key));
+                    }
                 }
+
+                // Then output remaining keys in alphabetical order
+                info.entrySet().stream()
+                        .filter(entry -> !java.util.Arrays.asList(orderedKeys).contains(entry.getKey()))
+                        .sorted(Map.Entry.comparingByKey())
+                        .forEach(entry -> LOGGER.info("  - {}: {}", entry.getKey(), entry.getValue()));
             }
         }
     }
@@ -78,24 +104,20 @@ public class VillagerPackValidator {
         List<String> errors = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         Map<String, Object> info = new HashMap<>();
-        boolean criticalFailure = false;
+        boolean criticalFailure;
 
         try {
-            // Use the NEW constructor that handles Mod IDs and Root Paths safely
             // fromMods is true if the name matches a Mod ID, otherwise we use the original logic
             VillagerPackLoader.VillagerPack pack = new VillagerPackLoader.VillagerPack(packPath, packName, !packName.contains("."));
 
-            // Use the existing class method to check for config
             if (!pack.hasConfig()) {
                 errors.add("CRITICAL: No villagerapi_config.json found - this is not a valid villagerpack");
                 pack.close();
                 return new ValidationResult(false, true, errors, warnings, info);
             }
 
-            // Utilize existing helper methods for structure validation
             criticalFailure = !validatePackStructure(pack, errors, warnings, info);
 
-            // Continue with existing modular validation methods
             validatePackMeta(pack, errors, warnings, info);
             validateVillagerData(pack, errors, warnings, info);
             validateDatapacks(pack, errors, warnings, info);
@@ -106,7 +128,7 @@ public class VillagerPackValidator {
             boolean hasErrors = !errors.isEmpty();
             return new ValidationResult(!hasErrors, criticalFailure, errors, warnings, info);
         } catch (Exception e) {
-            // We use the passed-in packName here to avoid another NullPointerException
+            // We use the passed in packName here to avoid NullPointerException
             LOGGER.error("Validation crashed for pack {}: {}", packName, e.getMessage());
             errors.add("CRITICAL: Failed to load pack: " + e.getMessage());
             return new ValidationResult(false, true, errors, warnings, info);
@@ -147,7 +169,7 @@ public class VillagerPackValidator {
                                          List<String> errors,
                                          List<String> warnings,
                                          Map<String, Object> info) {
-        // config.json validation
+
         VillagerPackConfig config = pack.getConfig();
         info.put("Namespace", config.getNamespace());
         info.put("Display Name", config.getDisplayName());
@@ -158,7 +180,6 @@ public class VillagerPackValidator {
             info.put("Description", config.getDescription());
         }
 
-        // pack.mcmeta validation (NON-CRITICAL)
         JsonObject meta = pack.getPackMeta();
 
         if (meta == null) {
@@ -172,9 +193,8 @@ public class VillagerPackValidator {
                 int format = packInfo.get("pack_format").getAsInt();
                 info.put("Pack format", format);
 
-                // MC 1.21.1 uses pack format 48 for data and 34 for resources
                 if (format < 34) {
-                    warnings.add("Pack format " + format + " is outdated for MC 1.21.1 (expected 34+ for resources, 48+ for data)");
+                    //warnings.add("Pack format " + format + " is outdated for MC 1.21.1 (expected 34+ for resources, 48+ for data)");
                 }
             } else {
                 warnings.add("pack.mcmeta missing pack_format - may cause datapack/resource pack issues");
@@ -343,7 +363,7 @@ public class VillagerPackValidator {
                             }
 
                             JsonObject levels = json.getAsJsonObject("levels");
-                            if (levels.size() == 0) {
+                            if (levels.isEmpty()) {
                                 warnings.add("Trade file '" + file.getFileName() + "' has no level definitions");
                             }
                         } catch (Exception e) {
@@ -526,23 +546,38 @@ public class VillagerPackValidator {
 
         Map<Path, String> pathsToValidate = new LinkedHashMap<>();
 
-        // External scanning
-        if (Files.exists(villagerPacksDir)) {
-            try (Stream<Path> paths = Files.list(villagerPacksDir)) {
-                paths.filter(path -> Files.isDirectory(path) ||
-                                (Files.isRegularFile(path) && (path.toString().endsWith(".zip") || path.toString().endsWith(".jar"))))
-                        .forEach(p -> {
-                            pathsToValidate.put(p, p.getFileName().toString());
+        for (Path directory : VillagerPackLoader.getPackDirectories(villagerPacksDir)) {
+            if (!Files.isDirectory(directory)) continue;
+
+            boolean dedicatedPackDirectory = directory.equals(villagerPacksDir);
+
+            try (Stream<Path> paths = Files.list(directory)) {
+                paths.filter(VillagerPackLoader::isPackCandidate)
+                        .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                        .forEach(path -> {
+                            if (dedicatedPackDirectory) {
+                                pathsToValidate.put(path, path.getFileName().toString());
+                                return;
+                            }
+
+                            try (VillagerPackLoader.VillagerPack pack = new VillagerPackLoader.VillagerPack(path)) {
+                                if (pack.hasConfig()) {
+                                    pathsToValidate.put(path, directory.getFileName() + "/" + path.getFileName());
+                                }
+                            } catch (IOException ignored) {
+                            }
                         });
             } catch (IOException e) {
-                LOGGER.error("Failed to read villagerpacks directory: {}", e.getMessage());
+                LOGGER.error("Failed to read {} directory: {}", directory.getFileName(), e.getMessage());
             }
         }
 
-        // Mod scanning
         CommonPlatformHelper.getAllModRootPaths().forEach((modId, rootPath) -> {
-            if (Files.exists(rootPath.resolve("villagerapi_config.json"))) {
-                pathsToValidate.put(rootPath, modId);
+            try (VillagerPackLoader.VillagerPack pack = new VillagerPackLoader.VillagerPack(rootPath, modId, true)) {
+                if (pack.hasConfig()) {
+                    pathsToValidate.put(rootPath, modId);
+                }
+            } catch (IOException ignored) {
             }
         });
 

@@ -11,14 +11,10 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 
-/**
- * NeoForge platform implementation - simplified using orchestrator
- */
 @Mod(VillagerAPI.MOD_ID)
 public final class VillagerAPINeoForge {
 
     public VillagerAPINeoForge(IEventBus modEventBus, ModContainer container) {
-
         VillagerAPI.init();
         PackInitializationOrchestrator.registerContent();
         CommonPlatformHelperImpl.registerAll(modEventBus);

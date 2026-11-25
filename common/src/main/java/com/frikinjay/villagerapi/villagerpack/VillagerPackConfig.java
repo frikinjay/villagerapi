@@ -88,7 +88,7 @@ public class VillagerPackConfig {
                         ? Identifier.parse(config.get("creative_tab_icon").getAsString())
                         : Identifier.withDefaultNamespace("emerald");
 
-                LOGGER.info("Loaded config for villagerpack '{}' (namespace: {})", displayName, namespace);
+                LOGGER.debug("Loaded config for villagerpack '{}' (namespace: {})", displayName, namespace);
                 return new VillagerPackConfig(namespace, displayName, description, version, author, creativeTabIcon);
 
             } catch (Exception e) {
@@ -123,7 +123,7 @@ public class VillagerPackConfig {
                 .replaceAll("-\\d+\\.\\d+.*$", "")        // Remove -1.0.0, -1.0.0-beta, etc.
                 .replaceAll("_v?\\d+\\.\\d+.*$", "")      // Remove _v1.0.0, _1.0.0, etc.
                 .replaceAll("-mc\\d+\\.\\d+.*$", "")      // Remove -mc1.21.1, etc.
-                .replaceAll("\\+.*$", "")                 // Remove +fabric, +forge, etc.
+                .replaceAll("\\+.*$", "")                 // Remove +fabric, +neoforge, etc.
                 .replaceAll("-fabric$", "")               // Remove -fabric suffix
                 .replaceAll("-forge$", "")                // Remove -forge suffix
                 .replaceAll("-neoforge$", "");            // Remove -neoforge suffix

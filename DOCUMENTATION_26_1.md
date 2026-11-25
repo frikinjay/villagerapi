@@ -4,11 +4,16 @@ VillagerAPI lets you add villager professions, workstations, villager types, tra
 
 This page covers the pack format, how packs are loaded, and the parts that tend to trip people up.
 
+This page is for VillagerAPI on Minecraft 26.1.2, 26.2, 26.3 and the 26.4 snapshot. For Minecraft 1.21.1 and 1.21.11, use the [1.21.x page](DOCUMENTATION_1_21_1.md) instead. Minecraft 26.1 and 26.1.1 are no longer supported; VillagerAPI 1.26.11.1 is the last version for them.
+
+The 26.1.2 and 26.2 version is built from an older code base and doesn't have everything on this page. Sections that don't apply to it say so, and [Minecraft 26.1.2 and 26.2](#minecraft-2612-and-262) lists every difference in one place.
+
 ---
 
 ## Contents
 
 - [Quick Start](#quick-start)
+- [Minecraft 26.1.2 and 26.2](#minecraft-2612-and-262)
 - [Where Packs Are Loaded From](#where-packs-are-loaded-from)
 - [Pack Layout](#pack-layout)
 - [villagerapi_config.json](#villagerapi_configjson)
@@ -24,6 +29,7 @@ This page covers the pack format, how packs are loaded, and the parts that tend 
 - [Overriding Vanilla and Other Mods' Trades](#overriding-vanilla-and-other-mods-trades)
 - [Biome Trades](#biome-trades)
 - [Hero Gifts](#hero-gifts)
+- [Wandering Trader](#wandering-trader)
 - [Biome Mappings](#biome-mappings)
 - [Village Types](#village-types)
 - [Village Structures](#village-structures)
@@ -50,15 +56,51 @@ This page covers the pack format, how packs are loaded, and the parts that tend 
 
 ---
 
+## Minecraft 26.1.2 and 26.2
+
+VillagerAPI for Minecraft 26.1.2 and 26.2 is one build, made from an older code base than the 26.3 and 26.4 versions. Workstations, POI types, villager types, professions, trades, biome trades, hero gifts, map decorations, explorer map trades and the wandering trader all work. These parts of the page work differently or not at all:
+
+**Loading**
+
+- Packs load from the `villagerpacks` folder and from mod jars. The `resourcepacks` folder isn't checked.
+- In `villagerpacks`, use a folder or a `.zip`. A `.jar` there has its `villagers/` files read, but its `data/` and `assets/` folders aren't loaded.
+- There's no `villagerpacks_order.json`. Packs are combined in alphabetical order of their folder or file name, and mod jars by mod ID.
+
+**Trades**
+
+- Each trade is handed to Minecraft exactly as you write it, in Minecraft's own villager trade format. Item modifiers, enchantments and other components work, but there's no conversion: write `given_item_modifiers` entries with `function`, the format Minecraft 26.1.2 and 26.2 expect.
+- `trade_list_amount` works. `trade_list_weight` is ignored, so the picks are plain random.
+- `trade_list_max` and a level's `replace` aren't supported.
+- Trades for a vanilla or another mod's profession are added to that level's trade list, and the level then offers as many trades as your pack lists for it (or its `trade_list_amount`), picked at random from the original trades and yours together. On 26.3 and newer, your trades come on top of the original picks instead.
+- Keep all of a profession's trades in one file. Two files with trades for the same profession and level overwrite each other's trades.
+- `reputation_discount` defaults to 0.05, the same as on 26.3 and newer.
+
+**Explorer maps**
+
+- A `structure_tags` file registers the map decoration only. There's no map item for it and no generated icon; a trade gives a normal filled map.
+- `map_decoration` must be a plain name without a namespace. The decoration is registered under the file's `namespace`.
+- Write map trades exactly as in [Explorer map trades](#explorer-map-trades): a `destination` with its namespace and no `#`, and the `filtered` / `discard` step. Nothing is changed for you, so `gives` stays `minecraft:map`.
+
+**Biome mappings**
+
+- Only the [older format](#older-format) works, with biome IDs as keys. Biome tags, `weight` and `replace` aren't supported, and each biome has one villager type. If two packs map the same biome, the last pack in alphabetical order wins.
+- Write villager types with their namespace, for example `morevillagers:badlands`.
+
+**Villages**
+
+- Village types, village structures, generated village packs and the Repurposed Structures compatibility aren't part of this version.
+
+---
+
 ## Where Packs Are Loaded From
 
-VillagerAPI looks for packs in two places:
+VillagerAPI looks for packs in three places:
 
 - **The `villagerpacks` folder** in your instance directory. A pack there can be a plain folder, a `.zip` or a `.jar`.
-- The `resourcepacks` folder in your instance directory. Any folder, `.zip` or `.jar` there that has a `villagerapi_config.json` at its root is loaded as a villager pack, exactly like one in `villagerpacks`. Ordinary resource packs in the same folder are ignored. The pack will also appear in the Resource Packs screen, but it doesn't need to be enabled there to work.
+- **The `resourcepacks` folder** in your instance directory. Any folder, `.zip` or `.jar` there that has a `villagerapi_config.json` at its root is loaded as a villager pack, exactly like one in `villagerpacks`. Ordinary resource packs in the same folder are ignored. The pack will also appear in the Resource Packs screen, but it doesn't need to be enabled there to work.
 - **Inside mod jars.** Any installed mod that has a `villagerapi_config.json` at the root of its jar is treated as a villager pack. This is how a mod like More Villagers ships its content.
 
-Both kinds work the same way once they are found.
+All three work the same way once they are found. On 26.1.2 and 26.2 the `resourcepacks` folder isn't checked.
 
 ---
 
@@ -77,6 +119,7 @@ villagerpacks/my_pack/
 │   ├── trades/                    trades per profession
 │   ├── biome_trades/              trades limited to certain villager types
 │   ├── gifts/                     hero of the village gifts
+│   ├── wandering_trader/          wandering trader trades
 │   ├── structure_tags/            explorer map definitions
 │   ├── biome_mappings/            biome to villager type mappings
 │   ├── village_types/             new villages copied from existing ones
@@ -189,6 +232,8 @@ The pack ID is `villagerpack:` followed by your pack's namespace, for example `v
 ---
 
 ## Pack Order and villagerpacks_order.json
+
+> On 26.1.2 and 26.2 there's no order file. Packs are combined in alphabetical order of their folder or file name.
 
 When two packs touch the same thing, the pack higher in the order wins. By default the order is alphabetical by namespace.
 
@@ -394,6 +439,8 @@ Each file here sets up one kind of explorer map. From a single file VillagerAPI 
 
 ### The map item
 
+> On 26.1.2 and 26.2 there's no map item and no generated icon. Trades give a normal filled map.
+
 The item ID comes from the tag name. A leading `on_` is removed. Then a trailing `_explorer_maps` or `_maps` is removed, and `_map` is added.
 
 | Tag | Map item |
@@ -511,6 +558,8 @@ Writing a level as an object lets you control how it's combined with other trade
 
 A level written as a plain list is the same as an object with only `trades`.
 
+On 26.1.2 and 26.2, `replace`, `trade_list_max` and `trade_list_weight` aren't supported. See [Minecraft 26.1.2 and 26.2](#minecraft-2612-and-262).
+
 ### Trade fields
 
 Each trade uses Minecraft's own villager trade format, so any field vanilla supports works here too.
@@ -522,7 +571,7 @@ Each trade uses Minecraft's own villager trade format, so any field vanilla supp
 | `gives` | Yes | Item the player gets. `id`, optional `count`, optional `components`. |
 | `max_uses` | No | Uses before the villager needs to restock. |
 | `xp` | No | Villager experience gained per trade. |
-| `reputation_discount` | No | How much the player's reputation lowers the price. |
+| `reputation_discount` | No | How much demand and the player's reputation change the price. Defaults to 0.05, the same as vanilla's own trades. Use 0 for a price that never changes. |
 | `merchant_predicate` | No | A condition the villager must meet to offer the trade. Kept as is, and combined with any biome restriction. |
 | `given_item_modifiers` | No | Item functions applied to the item the player gets. See below. |
 | `trade_list_weight` | No | How likely this trade is to be picked when the level uses `trade_list_amount` or `trade_list_max`. Defaults to 1. Zero or a negative number means it's never picked. |
@@ -603,6 +652,8 @@ Write item functions under `given_item_modifiers` and name each one with `functi
 
 ### Explorer map trades
 
+> On 26.1.2 and 26.2 none of the automatic changes below happen. Write the trade exactly like the example, with the destination's namespace and no `#`.
+
 To sell an explorer map, use `minecraft:exploration_map` with `destination` set to one of your structure tags:
 
 ```json
@@ -664,6 +715,8 @@ You'll see these IDs in the log if a trade fails to parse. Trades for the same p
 ---
 
 ## Overriding Vanilla and Other Mods' Trades
+
+> On 26.1.2 and 26.2 trades can only be added, not replaced, and the level's number of trades changes. See [Minecraft 26.1.2 and 26.2](#minecraft-2612-and-262).
 
 There's no separate override format. A trade file's `profession` can point at any profession, including ones your pack didn't create, like `minecraft:farmer` or `othermod:blacksmith`. What happens to that profession's existing trades is decided per level.
 
@@ -866,9 +919,99 @@ It's harmless to include this file on Fabric too, so one pack can serve both loa
 
 ---
 
+## Wandering Trader
+
+**Path:** `villagers/wandering_trader/{any name}.json`
+
+Villager packs can change what the wandering trader buys and sells: add trades, add whole new pools, change how many trades a pool offers, remove trades for certain items, or replace vanilla's trades entirely. Any file name works, and subfolders are fine. Without such a file, the wandering trader is left exactly as vanilla makes it.
+
+```json
+{
+  "replace": false,
+  "remove": ["minecraft:pufferfish_bucket", "minecraft:nautilus_shell"],
+  "pools": {
+    "common": {
+      "amount": 6,
+      "trades": [
+        {
+          "wants": { "id": "minecraft:emerald", "count": 3 },
+          "gives": { "id": "minecraft:cherry_sapling" },
+          "max_uses": 8,
+          "xp": 1
+        }
+      ]
+    },
+    "uncommon": {
+      "replace": true,
+      "trades": [
+        {
+          "wants": { "id": "minecraft:emerald", "count": 6 },
+          "gives": { "id": "minecraft:nautilus_shell" },
+          "max_uses": 4,
+          "xp": 1
+        }
+      ]
+    },
+    "my_pack:festive": [
+      {
+        "wants": { "id": "minecraft:emerald", "count": 5 },
+        "gives": { "id": "minecraft:cake" },
+        "max_uses": 2,
+        "xp": 1
+      }
+    ]
+  }
+}
+```
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `replace` | `false` | When `true`, all of vanilla's wandering trader trades are dropped and only villager pack trades are left. |
+| `remove` | none | A list of item IDs. Every wandering trader trade that sells or asks for one of these items is left out. |
+| `pools` | none | The pools the trader picks its trades from, by name. |
+
+### Pools
+
+Each wandering trader picks a number of trades from every pool. Vanilla has three:
+
+| Pool | Trades picked |
+|------|---------------|
+| `buying` | 2. The trader buys these items from the player. |
+| `uncommon` | 2 |
+| `common` | 5 |
+
+A pool is either a list of trades, or an object:
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `trades` | none | Trades added to the pool, in the same format as [villager trades](#trade-fields): `wants`, `gives`, `additional_wants`, `max_uses`, `xp`, `reputation_discount`, `given_item_modifiers` and so on. |
+| `amount` | the pool's own | How many trades the trader picks from this pool. |
+| `replace` | `false` | When `true`, vanilla's trades are dropped from this pool only. |
+
+Any other name, such as `my_pack:festive` above, makes a new pool. A new pool without an `amount` gives all of its trades to every wandering trader. Vanilla pool names can also be written with their namespace, like `minecraft:common`.
+
+### Several packs
+
+Files are read in [pack order](#pack-order-and-villagerpacks_orderjson), or alphabetical order on 26.1.2 and 26.2. `replace` and `remove` from any pack apply, the trades from all packs are added together, and the first pack that sets a pool's `amount` decides it.
+
+### Notes
+
+- `remove` matches the items of the finished trade. Explorer maps are `minecraft:filled_map`, so use that ID to remove map trades. `minecraft:map` only matches blank maps.
+- An item in `remove` also removes trades for it that other villager packs add.
+- If a trade can't be made, for example a map with no structure nearby, the trader picks another one from the same pool instead.
+- A trade without `reputation_discount` uses 0.05, the same as villager trades.
+- Wandering trader trades that other mods add to vanilla's trade tags are kept, and `remove` works on them too.
+- The server log lists every pool a villager pack adds, so a misspelled vanilla pool name is easy to spot.
+- The files are read when the world or server starts. Changes need a restart, not just `/reload`.
+- Trade viewers such as Just Enough Resources don't show these changes.
+
+---
+
 ## Biome Mappings
 
 **Path:** `villagers/biome_mappings/{any name}.json`
+
+> On 26.1.2 and 26.2 only the [older format](#older-format) works.
 
 Decides which villager types spawn in which biomes. A biome can have several types, each with a weight, and a villager spawning there picks one at random.
 
@@ -924,6 +1067,8 @@ The older format, with biomes as keys, still works. Every entry in it counts as 
 ---
 
 ## Village Types
+
+> Not available on 26.1.2 and 26.2.
 
 **Path:** `villagers/village_types/{folder}/{any name}.json`
 
@@ -983,6 +1128,8 @@ Villagers in the village get their type from the biome, through [biome mappings]
 
 ## Village Structures
 
+> Not available on 26.1.2 and 26.2.
+
 **Path:** `villagers/village_structures/{folder}/{any name}.json`
 
 Adds houses to a village: a vanilla village, another mod's village, or a village from [Village Types](#village-types).
@@ -1035,6 +1182,8 @@ Each house takes:
 
 ## Repurposed Structures Compatibility
 
+> Not available on 26.1.2 and 26.2.
+
 When a `village_structures` file targets a Repurposed Structures village, for example `repurposed_structures:village_badlands`, VillagerAPI writes Repurposed Structures' own compatibility files instead of changing the pools itself:
 
 - `data/{namespace}/rs_pool_additions/...`, which adds the houses to the village's `houses` or `zombie/houses` pool.
@@ -1060,6 +1209,8 @@ Repurposed Structures applies these files itself, and without it installed they'
 ---
 
 ## Generated Village Packs
+
+> Not available on 26.1.2 and 26.2.
 
 Everything VillagerAPI makes for villages, meaning copied structures, pools, structure files, biome tags, house structures and Repurposed Structures files, goes into a separate datapack for each villager pack:
 

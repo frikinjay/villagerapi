@@ -14,7 +14,8 @@ import net.neoforged.fml.ModList;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
-import java.nio.file.Path;
+import java.net.URI;
+import java.nio.file.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -23,6 +24,7 @@ import java.util.function.Supplier;
 public class CommonPlatformHelperImpl {
     private static final Map<String, DeferredRegister<Block>> WORKSTATION_BLOCK_REGISTERS = new HashMap<>();
     private static final Map<String, DeferredRegister<Item>> WORKSTATION_ITEM_REGISTERS = new HashMap<>();
+    private static final Map<String, DeferredRegister<Item>> MAP_ITEM_REGISTERS = new HashMap<>();
     private static final Map<String, DeferredRegister<VillagerType>> VILLAGER_TYPE_REGISTERS = new HashMap<>();
     private static final Map<String, DeferredRegister<MapDecorationType>> MAP_DECO_TYPE_REGISTERS = new HashMap<>();
     private static final Map<String, DeferredRegister<VillagerProfession>> PROFESSION_REGISTERS = new HashMap<>();
@@ -33,6 +35,9 @@ public class CommonPlatformHelperImpl {
 
     public static final DeferredRegister<Item> WORKSTATION_ITEMS =
             getOrCreateWorkstationItemRegister(VillagerAPI.MOD_ID);
+
+    public static final DeferredRegister<Item> MAP_ITEMS =
+            getOrCreateMapItemRegister(VillagerAPI.MOD_ID);
 
     public static final DeferredRegister<VillagerType> VILLAGER_TYPES =
             getOrCreateVillagerTypeRegister(VillagerAPI.MOD_ID);
@@ -53,6 +58,11 @@ public class CommonPlatformHelperImpl {
 
     private static DeferredRegister<Item> getOrCreateWorkstationItemRegister(String namespace) {
         return WORKSTATION_ITEM_REGISTERS.computeIfAbsent(namespace,
+                ns -> DeferredRegister.create(BuiltInRegistries.ITEM, ns));
+    }
+
+    private static DeferredRegister<Item> getOrCreateMapItemRegister(String namespace) {
+        return MAP_ITEM_REGISTERS.computeIfAbsent(namespace,
                 ns -> DeferredRegister.create(BuiltInRegistries.ITEM, ns));
     }
 
@@ -83,6 +93,11 @@ public class CommonPlatformHelperImpl {
 
     public static Supplier<Item> registerWorkstationItem(String namespace, String name, Supplier<Item> item) {
         DeferredRegister<Item> register = getOrCreateWorkstationItemRegister(namespace);
+        return register.register(name, item);
+    }
+
+    public static Supplier<Item> registerMapItem(String namespace, String name, Supplier<Item> item) {
+        DeferredRegister<Item> register = getOrCreateMapItemRegister(namespace);
         return register.register(name, item);
     }
 
@@ -120,6 +135,7 @@ public class CommonPlatformHelperImpl {
     public static void registerAll(IEventBus modEventBus) {
         WORKSTATION_BLOCKS.register(modEventBus);
         WORKSTATION_ITEMS.register(modEventBus);
+        MAP_ITEMS.register(modEventBus);
         VILLAGER_TYPES.register(modEventBus);
         MAP_DECORATION_TYPES.register(modEventBus);
         PROFESSIONS.register(modEventBus);
@@ -130,6 +146,9 @@ public class CommonPlatformHelperImpl {
         });
         WORKSTATION_ITEM_REGISTERS.values().forEach(reg -> {
             if (reg != WORKSTATION_ITEMS) reg.register(modEventBus);
+        });
+        MAP_ITEM_REGISTERS.values().forEach(reg -> {
+            if (reg != MAP_ITEMS) reg.register(modEventBus);
         });
         VILLAGER_TYPE_REGISTERS.values().forEach(reg -> {
             if (reg != VILLAGER_TYPES) reg.register(modEventBus);
@@ -147,10 +166,46 @@ public class CommonPlatformHelperImpl {
 
     public static Map<String, Path> getAllModRootPaths() {
         Map<String, Path> modPaths = new HashMap<>();
-        net.neoforged.fml.ModList.get().getMods().forEach(mod -> {
-            Path root = mod.getOwningFile().getFile().getFilePath();
-            modPaths.put(mod.getModId(), root);
+
+        ModList.get().getMods().forEach(mod -> {
+            try {
+                Path jarPath = mod.getOwningFile().getFile().getFilePath();
+
+                // If its a JAR file, we need to open it as a filesystem and get the root
+                if (Files.isRegularFile(jarPath) && jarPath.toString().endsWith(".jar")) {
+                    URI uri = URI.create("jar:" + jarPath.toUri());
+
+                    // Try to get existing filesystem first (NeoForge may have already opened it)
+                    FileSystem fs = null;
+                    //boolean needsClose = false;
+
+                    try {
+                        fs = FileSystems.getFileSystem(uri);
+                    } catch (FileSystemNotFoundException e) {
+                        // Filesystem doesnt exist yet ,this is expected for most mods
+                        // We DONT create it here to avoid conflicts with NeoForge
+                    }
+
+                    if (fs != null && fs.isOpen()) {
+                        // Use existing open filesystem (NeoForge owns it)
+                        Path root = fs.getPath("/");
+                        modPaths.put(mod.getModId(), root);
+                    } else {
+                        // Filesystem not available, we'll handle this in VillagerPackLoader
+                        // by passing the JAR path directly
+                        modPaths.put(mod.getModId(), jarPath);
+                    }
+                } else if (Files.isDirectory(jarPath)) {
+                    // If its already a directory (dev environment and stuff), use it directly
+                    modPaths.put(mod.getModId(), jarPath);
+                }
+            } catch (Exception e) {
+                VillagerAPI.LOGGER.debug("Failed to get root path for mod {}: {}",
+                        mod.getModId(), e.getMessage());
+            }
         });
+
+        VillagerAPI.LOGGER.debug("Loaded {} mod root paths for villagerpack scanning", modPaths.size());
         return modPaths;
     }
 }

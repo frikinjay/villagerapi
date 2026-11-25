@@ -4,11 +4,14 @@ import com.frikinjay.villagerapi.VillagerAPI;
 import com.frikinjay.villagerapi.platform.CommonPlatformHelper;
 import com.frikinjay.villagerapi.villagerpack.VillagerPackCodecs;
 import com.google.gson.JsonObject;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.saveddata.maps.MapDecorationType;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 import static com.frikinjay.villagerapi.VillagerAPI.LOGGER;
@@ -23,19 +26,32 @@ public class VAPIMapDecorations {
         try {
             VillagerPackCodecs.StructureTagData decorationData = VillagerPackCodecs.parseStructureTag(json);
 
-            String decorationName = decorationData.decoration();
-            String registryName = decorationName.replace("/", "_");
-
+            String rawDecoration = decorationData.decoration();
             String namespace = decorationData.namespace() != null ? decorationData.namespace() : VillagerAPI.MOD_ID;
-            int map_color = hexToInt(decorationData.map_color());
 
+            String decorationName = rawDecoration;
+            if (rawDecoration.contains(":")) {
+                String[] split = rawDecoration.split(":");
+                namespace = split[0];
+                decorationName = split[1];
+            }
+
+            String registryName = decorationName.replace("/", "_");
             Identifier decorationId = Identifier.fromNamespaceAndPath(namespace, decorationName);
 
-            Supplier<MapDecorationType> type = CommonPlatformHelper.registerMapDecorationType(
-                    namespace,
-                    registryName,
-                    () -> new MapDecorationType(decorationId, true, map_color, false, true)
-            );
+            Supplier<MapDecorationType> type;
+            Optional<Holder.Reference<MapDecorationType>> existing = BuiltInRegistries.MAP_DECORATION_TYPE.get(decorationId);
+            if (existing.isPresent()) {
+                MapDecorationType existingType = VillagerAPI.unwrapHolder(existing);
+                type = () -> existingType;
+                LOGGER.debug("Reusing existing map decoration type '{}' instead of re-registering it", decorationId);
+            } else {
+                type = CommonPlatformHelper.registerMapDecorationType(
+                        namespace,
+                        registryName,
+                        () -> new MapDecorationType(decorationId, true, true)
+                );
+            }
 
             String fullKey = namespace + ":" + registryName;
             DYNAMIC_MAP_DECORATIONS.put(fullKey, type);
@@ -81,5 +97,4 @@ public class VAPIMapDecorations {
         }
         return Integer.parseInt(hexColor, 16);
     }
-
 }

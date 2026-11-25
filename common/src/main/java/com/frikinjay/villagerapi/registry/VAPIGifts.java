@@ -36,17 +36,23 @@ public class VAPIGifts {
     }
 
     public static void applyAllGifts() {
-        Map<VillagerProfession, ResourceKey<LootTable>> gifts = GiveGiftToHeroAccessor.getGifts();
+        Map<ResourceKey<VillagerProfession>, ResourceKey<LootTable>> gifts = GiveGiftToHeroAccessor.getGifts();
 
-        DYNAMIC_GIFTS.values().forEach(lazyGift -> {
+        int applied = 0;
+        for (LazyGift lazyGift : DYNAMIC_GIFTS.values()) {
             VillagerProfession profession = lazyGift.resolveProfession();
-            if (profession != null) {
-                gifts.put(profession, lazyGift.getLootTable());
-                LOGGER.debug("Applied gift for profession {}", lazyGift.professionName);
+            ResourceKey<VillagerProfession> key = profession == null ? null
+                    : BuiltInRegistries.VILLAGER_PROFESSION.getResourceKey(profession).orElse(null);
+            if (key == null) {
+                LOGGER.warn("Gift {} was not applied: profession {} is not registered", lazyGift.name, lazyGift.professionName);
+                continue;
             }
-        });
+            gifts.put(key, lazyGift.getLootTable());
+            applied++;
+            LOGGER.debug("Applied gift for profession {}", key.identifier());
+        }
 
-        LOGGER.info("Applied {} gifts from packs", DYNAMIC_GIFTS.size());
+        LOGGER.info("Applied {} of {} gifts from packs", applied, DYNAMIC_GIFTS.size());
     }
 
     public static Map<String, ResourceKey<LootTable>> getDynamicGifts() {

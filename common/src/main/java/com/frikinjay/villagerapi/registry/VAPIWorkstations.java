@@ -2,7 +2,6 @@ package com.frikinjay.villagerapi.registry;
 
 import com.frikinjay.villagerapi.VillagerAPI;
 import com.frikinjay.villagerapi.platform.CommonPlatformHelper;
-import com.frikinjay.villagerapi.villagerpack.VillagerPackCodecs;
 import com.google.gson.JsonObject;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
@@ -17,9 +16,6 @@ import java.util.function.Supplier;
 
 import static com.frikinjay.villagerapi.VillagerAPI.LOGGER;
 
-/**
- * Optimized workstations registry using new helper classes
- */
 public class VAPIWorkstations {
 
     private static final RegistryHelper.DynamicRegistry<Block> WORKSTATIONS =

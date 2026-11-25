@@ -3,7 +3,7 @@
   "id": "villagerapi",
   "version": "${version}",
   "name": "VillagerAPI",
-  "accessWidener": "villagerapi.accesswidener",
+  "accessWidener": "villagerapi.classtweaker",
   "description": "API to add new villager jobs, trades, and villager biome types!",
   "authors": [
     "frikinjay"
@@ -30,12 +30,12 @@
     "villagerapi.mixins.json"
   ],
   "depends": {
-    "fabricloader": ">=0.18.1",
-    "minecraft": "1.21.11",
-    "java": ">=21",
+    "fabricloader": ">=0.19.5",
+    "minecraft": ">=26.3",
+    "java": ">=25",
     "fabric-api": "*"
   },
   "suggests": {
-
+    
   }
 }

@@ -1,6 +1,7 @@
 package com.frikinjay.villagerapi.villagerpack;
 
 import com.frikinjay.villagerapi.platform.CommonPlatformHelper;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -8,6 +9,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -16,6 +18,18 @@ import java.util.stream.Stream;
 import static com.frikinjay.villagerapi.VillagerAPI.LOGGER;
 
 public class VillagerPackLoader {
+
+    public static final String RESOURCE_PACKS_DIRECTORY = "resourcepacks";
+
+    private static final Set<String> REPORTED_DUPLICATES = new HashSet<>();
+
+    private static final Set<DataType> NAMESPACED_TYPES = EnumSet.of(
+            DataType.STRUCTURE_TAGS,
+            DataType.WORKSTATIONS,
+            DataType.POI_TYPES,
+            DataType.TYPES,
+            DataType.PROFESSIONS
+    );
 
     private final Path villagerPacksDir;
 
@@ -41,90 +55,154 @@ public class VillagerPackLoader {
             allData.put(type, new LinkedHashMap<>());
         }
 
+        List<VillagerPack> packs = Collections.emptyList();
         try {
-            List<VillagerPack> packs = discoverPacks();
+            packs = discoverAll(villagerPacksDir);
 
-            int fromVillagerPacks = 0;
+            int fromFolders = 0;
             int fromMods = 0;
 
             for (VillagerPack pack : packs) {
                 if (pack.isFromModsDirectory()) {
                     fromMods++;
                 } else {
-                    fromVillagerPacks++;
+                    fromFolders++;
                 }
             }
 
-            LOGGER.info("Found {} villager pack(s): {} from villagerpacks/, {} from mods/",
-                    packs.size(), fromVillagerPacks, fromMods);
+            LOGGER.info("Found {} villager pack(s): {} from villagerpacks/ and resourcepacks/, {} from mods (manual ordering: {})",
+                    packs.size(), fromFolders, fromMods, VillagerPackOrderConfig.isManualOrderingEnabled());
 
-            try {
-                for (VillagerPack pack : packs) {
-                    if (pack.isValid()) {
-                        loadPackData(pack, allData);
-                    } else {
-                        LOGGER.warn("Skipping invalid pack: {}", pack.getName());
-                    }
-                }
-            } finally {
-                // Close all packs when done
-                for (VillagerPack pack : packs) {
-                    pack.close();
+            for (int i = 0; i < packs.size(); i++) {
+                VillagerPack pack = packs.get(i);
+                LOGGER.info("  [{}] {} ({})", i + 1, pack.getName(), pack.getSourceDescription());
+            }
+
+            for (VillagerPack pack : packs) {
+                if (pack.isValid()) {
+                    loadPackData(pack, allData);
+                } else {
+                    LOGGER.warn("Skipping invalid pack: {} ({})", pack.getName(), pack.getSourceDescription());
                 }
             }
         } catch (Exception e) {
             LOGGER.error("Failed to load villager packs", e);
+        } finally {
+            for (VillagerPack pack : packs) {
+                pack.close();
+            }
         }
 
         return allData;
     }
 
-    private List<VillagerPack> discoverPacks() throws Exception {
-        List<VillagerPack> discovered = new ArrayList<>();
+    public static List<Path> getPackDirectories(Path villagerPacksDir) {
+        List<Path> directories = new ArrayList<>();
+        directories.add(villagerPacksDir);
 
-        if (Files.exists(villagerPacksDir)) {
-            try (Stream<Path> paths = Files.list(villagerPacksDir)) {
-                paths.filter(path -> Files.isDirectory(path) ||
-                                (Files.isRegularFile(path) && (path.toString().endsWith(".zip") || path.toString().endsWith(".jar"))))
-                        .forEach(path -> {
-                            try {
-                                VillagerPack pack = new VillagerPack(path);
-                                if (pack.hasConfig()) {
-                                    discovered.add(pack);
-                                } else {
-                                    pack.close();
-                                }
-                            } catch (IOException e) {
-                                LOGGER.debug("Failed to load external pack: {} ({})", path.getFileName(), e.getMessage());
-                            }
-                        });
-            }
+        Path gameDirectory = villagerPacksDir.toAbsolutePath().getParent();
+        if (gameDirectory != null) {
+            directories.add(gameDirectory.resolve(RESOURCE_PACKS_DIRECTORY));
         }
 
-        CommonPlatformHelper.getAllModRootPaths().forEach((modId, rootPath) -> {
-            try {
-                VillagerPack pack = new VillagerPack(rootPath, modId, true);
+        return directories;
+    }
 
-                if (pack.hasConfig()) {
-                    discovered.add(pack);
-                } else {
+    public static List<VillagerPack> discoverAll(Path villagerPacksDir) {
+        List<VillagerPack> opened = new ArrayList<>();
 
-                }
-            } catch (IOException e) {
-                LOGGER.debug("Mod {} does not contain villagerpack configuration.", modId);
+        try {
+            for (Path directory : getPackDirectories(villagerPacksDir)) {
+                scanDirectory(directory, directory.equals(villagerPacksDir), opened);
             }
-        });
 
-        return discovered.stream()
-                .sorted(Comparator.comparing(VillagerPack::getName))
-                .collect(Collectors.toList());
+            Map<String, Path> modRoots = new TreeMap<>(CommonPlatformHelper.getAllModRootPaths());
+            for (Map.Entry<String, Path> entry : modRoots.entrySet()) {
+                try {
+                    VillagerPack pack = new VillagerPack(entry.getValue(), entry.getKey(), true);
+                    if (pack.hasConfig()) {
+                        opened.add(pack);
+                    } else {
+                        pack.close();
+                    }
+                } catch (IOException e) {
+                    LOGGER.debug("Mod {} does not contain villagerpack configuration.", entry.getKey());
+                }
+            }
+
+            Map<String, VillagerPack> uniqueByNamespace = new LinkedHashMap<>();
+            for (VillagerPack pack : opened) {
+                VillagerPack existing = uniqueByNamespace.putIfAbsent(pack.getName(), pack);
+                if (existing != null) {
+                    reportDuplicate(pack, existing);
+                    pack.close();
+                }
+            }
+
+            List<VillagerPack> unique = new ArrayList<>(uniqueByNamespace.values());
+            List<String> names = unique.stream().map(VillagerPack::getName).collect(Collectors.toList());
+
+            VillagerPackOrderConfig.sync(names);
+            return VillagerPackOrderConfig.sort(unique, VillagerPack::getName);
+        } catch (Exception e) {
+            LOGGER.error("Failed to discover villagerpacks", e);
+            for (VillagerPack pack : opened) {
+                pack.close();
+            }
+            return new ArrayList<>();
+        }
+    }
+
+    private static void scanDirectory(Path directory, boolean dedicatedPackDirectory, List<VillagerPack> opened) {
+        if (!Files.isDirectory(directory)) return;
+
+        try (Stream<Path> paths = Files.list(directory)) {
+            List<Path> candidates = paths
+                    .filter(VillagerPackLoader::isPackCandidate)
+                    .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                    .toList();
+
+            for (Path path : candidates) {
+                try {
+                    VillagerPack pack = new VillagerPack(path);
+                    if (pack.hasConfig()) {
+                        opened.add(pack);
+                    } else {
+                        pack.close();
+                    }
+                } catch (IOException e) {
+                    if (dedicatedPackDirectory) {
+                        LOGGER.error("Failed to open villagerpack '{}' in {}/", path.getFileName(), directory.getFileName(), e);
+                    } else {
+                        LOGGER.debug("Skipping '{}' in {}/, it could not be opened as a pack", path.getFileName(), directory.getFileName());
+                    }
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.error("Failed to list {} directory", directory, e);
+        }
+    }
+
+    private static void reportDuplicate(VillagerPack ignored, VillagerPack kept) {
+        String key = ignored.getName() + "|" + ignored.getSourceDescription() + "|" + kept.getSourceDescription();
+        synchronized (REPORTED_DUPLICATES) {
+            if (!REPORTED_DUPLICATES.add(key)) return;
+        }
+        LOGGER.error("Villagerpack {} is ignored: its namespace '{}' is already used by {}. Each villagerpack must use a unique namespace in its villagerapi_config.json",
+                ignored.getSourceDescription(), ignored.getName(), kept.getSourceDescription());
+    }
+
+    static boolean isPackCandidate(Path path) {
+        if (Files.isDirectory(path)) return true;
+        if (!Files.isRegularFile(path)) return false;
+        String fileName = path.getFileName().toString();
+        return fileName.endsWith(".zip") || fileName.endsWith(".jar");
     }
 
     private void loadPackData(VillagerPack pack, Map<DataType, Map<String, JsonObject>> allData) {
         String packSource = pack.isFromModsDirectory() ? "mod JAR" : "villagerpack";
         LOGGER.info("Loading {} '{}' (namespace: {})", packSource, pack.getDisplayName(), pack.getNamespace());
 
-        // Store the current pack namespace for workstation registration
         String currentPackNamespace = pack.getNamespace();
 
         for (DataType type : DataType.values()) {
@@ -136,22 +214,38 @@ public class VillagerPackLoader {
 
             try (Stream<Path> files = Files.walk(typeDir)) {
                 files.filter(p -> p.toString().endsWith(".json"))
+                        .sorted()
                         .forEach(file -> {
-                            try {
+                            try (InputStreamReader reader = new InputStreamReader(Files.newInputStream(file), StandardCharsets.UTF_8)) {
                                 String fileName = typeDir.relativize(file).toString()
                                         .replace(".json", "")
-                                        .replace(File.separator, "/");
+                                        .replace(File.separator, "/")
+                                        .replace("\\", "/");
 
-                                JsonObject json = JsonParser.parseReader(
-                                        new InputStreamReader(Files.newInputStream(file))
-                                ).getAsJsonObject();
+                                JsonElement element = JsonParser.parseReader(reader);
+                                if (!element.isJsonObject()) {
+                                    LOGGER.warn("Skipping {} file that is not a JSON object: {}", type.name(), file);
+                                    return;
+                                }
+                                JsonObject json = element.getAsJsonObject();
 
-                                // Add pack namespace to workstation data for creative tab tracking
+                                if (NAMESPACED_TYPES.contains(type) && !json.has("namespace")) {
+                                    json.addProperty("namespace", currentPackNamespace);
+                                }
+
                                 if (type == DataType.WORKSTATIONS) {
                                     json.addProperty("_pack_namespace", currentPackNamespace);
                                 }
 
-                                allData.get(type).put(fileName, json);
+                                JsonObject existing = allData.get(type).putIfAbsent(fileName, json);
+                                if (existing != null) {
+                                    if (type != DataType.TRADES && type != DataType.BIOME_TRADES) {
+                                        LOGGER.warn("{} '{}' from pack '{}' ignored, a higher priority pack already provides it",
+                                                type.name(), fileName, pack.getName());
+                                    }
+                                    return;
+                                }
+
                                 LOGGER.debug("Loaded {} from {} {}: {}", type.name(), packSource, pack.getName(), fileName);
                             } catch (Exception e) {
                                 LOGGER.error("Failed to load file: {}", file, e);
@@ -187,99 +281,89 @@ public class VillagerPackLoader {
     }
 
     public List<VillagerPack> getDiscoveredPacks() {
-        try {
-            return discoverPacks();
-        } catch (Exception e) {
-            LOGGER.error("Failed to discover packs", e);
-            return Collections.emptyList();
-        }
+        return discoverAll(villagerPacksDir);
     }
 
     public static class VillagerPack implements AutoCloseable {
         private final Path sourcePath;
+        private final String sourceName;
         private final String name;
         private final FileSystem zipFileSystem;
         private final Path rootPath;
         private final boolean ownsFileSystem;
         private final boolean fromModsDirectory;
+        private final VillagerPackConfig config;
         private JsonObject packMeta;
-        private VillagerPackConfig config;
 
-
-        public VillagerPack(Path rootPath, String name, boolean fromMods) throws IOException {
-            this.sourcePath = rootPath;
-            this.rootPath = rootPath;
-            this.name = name;
-            this.fromModsDirectory = fromMods;
-            this.zipFileSystem = null;
-            this.ownsFileSystem = false;
-
-            loadPackMeta();
-            loadConfig();
-        }
-
-        public VillagerPack(Path path) throws IOException {
+        public VillagerPack(Path path, String sourceName, boolean fromMods) throws IOException {
             this.sourcePath = path;
+            this.sourceName = sourceName;
+            this.fromModsDirectory = fromMods;
 
-            // Check if this pack is from the mods directory
-            //this.fromModsDirectory = path.toString().contains("mods" + File.separator) ||
-            //        path.toString().contains("mods/");
-            this.fromModsDirectory = false;
-
-            if (Files.isDirectory(path)) {
-                // Directory pack
-                this.name = path.getFileName().toString();
-                this.zipFileSystem = null;
-                this.rootPath = path;
-                this.ownsFileSystem = false;
-            } else if (path.toString().endsWith(".zip") || path.toString().endsWith(".jar")) {
-                // ZIP pack
-                this.name = path.getFileName().toString().substring(0, path.getFileName().toString().length() - 4);
+            if (Files.isRegularFile(path) && (path.toString().endsWith(".zip") || path.toString().endsWith(".jar"))) {
                 URI uri = URI.create("jar:" + path.toUri());
 
-                // Try to get existing filesystem first, create new one if it doesn't exist
                 FileSystem fs;
                 boolean created = false;
                 try {
                     fs = FileSystems.getFileSystem(uri);
+                    LOGGER.debug("Reusing existing filesystem for pack: {}", sourceName);
                 } catch (FileSystemNotFoundException e) {
                     fs = FileSystems.newFileSystem(uri, Collections.emptyMap());
                     created = true;
+                    LOGGER.debug("Created new filesystem for pack: {}", sourceName);
                 }
 
                 this.zipFileSystem = fs;
-                this.rootPath = zipFileSystem.getPath("/");
+                this.rootPath = fs.getPath("/");
                 this.ownsFileSystem = created;
             } else {
-                throw new IOException("Unsupported pack format: " + path);
+                this.rootPath = path;
+                this.zipFileSystem = null;
+                this.ownsFileSystem = false;
             }
 
+            this.config = VillagerPackConfig.load(rootPath, sourceName);
+            this.name = config.getNamespace();
+
             loadPackMeta();
-            loadConfig();
+        }
+
+        public VillagerPack(Path path) throws IOException {
+            this(requireSupported(path), stripExtension(path), false);
+        }
+
+        private static Path requireSupported(Path path) throws IOException {
+            if (Files.isDirectory(path)) return path;
+            String fileName = path.getFileName().toString();
+            if (fileName.endsWith(".zip") || fileName.endsWith(".jar")) return path;
+            throw new IOException("Unsupported pack format: " + path);
+        }
+
+        private static String stripExtension(Path path) {
+            String fileName = path.getFileName().toString();
+            if (!Files.isDirectory(path) && (fileName.endsWith(".zip") || fileName.endsWith(".jar"))) {
+                return fileName.substring(0, fileName.length() - 4);
+            }
+            return fileName;
         }
 
         private void loadPackMeta() {
             Path metaFile = rootPath.resolve("pack.mcmeta");
             if (Files.exists(metaFile)) {
-                try (InputStreamReader reader = new InputStreamReader(Files.newInputStream(metaFile))) {
+                try (InputStreamReader reader = new InputStreamReader(Files.newInputStream(metaFile), StandardCharsets.UTF_8)) {
                     packMeta = JsonParser.parseReader(reader).getAsJsonObject();
                 } catch (Exception e) {
-                    LOGGER.warn("Failed to load pack.mcmeta for pack: {}", name, e);
+                    LOGGER.warn("Failed to load pack.mcmeta for pack: {} ({})", name, getSourceDescription(), e);
                 }
             }
         }
 
-        private void loadConfig() {
-            this.config = VillagerPackConfig.load(rootPath, name);
-        }
-
         public boolean hasConfig() {
-            Path configPath = rootPath.resolve("villagerapi_config.json");
-            return Files.exists(configPath);
+            return Files.exists(rootPath.resolve("villagerapi_config.json"));
         }
 
         public boolean isValid() {
-            // A pack is valid if it has villagerapi_config.json AND (pack.mcmeta OR villagers folder)
             return hasConfig() && (packMeta != null || Files.exists(rootPath.resolve("villagers")));
         }
 
@@ -289,6 +373,10 @@ public class VillagerPackLoader {
 
         public boolean hasData() {
             return Files.exists(rootPath.resolve("data"));
+        }
+
+        public boolean hasServerContent() {
+            return hasData() || Files.exists(rootPath.resolve("villagers"));
         }
 
         public Path getPath() {
@@ -301,6 +389,20 @@ public class VillagerPackLoader {
 
         public String getName() {
             return name;
+        }
+
+        public String getSourceName() {
+            return sourceName;
+        }
+
+        public String getSourceDescription() {
+            if (fromModsDirectory) {
+                return "mod '" + sourceName + "'";
+            }
+            Path fileName = sourcePath.getFileName();
+            Path parent = sourcePath.toAbsolutePath().getParent();
+            String folder = parent != null && parent.getFileName() != null ? parent.getFileName().toString() : "villagerpacks";
+            return "'" + (fileName != null ? fileName.toString() : sourceName) + "' in " + folder + "/";
         }
 
         public String getNamespace() {
@@ -334,11 +436,12 @@ public class VillagerPackLoader {
 
         @Override
         public void close() {
-            if (zipFileSystem != null && ownsFileSystem) {
+            if (zipFileSystem != null && ownsFileSystem && zipFileSystem.isOpen()) {
                 try {
                     zipFileSystem.close();
+                    LOGGER.debug("Closed filesystem for pack: {} ({})", name, getSourceDescription());
                 } catch (IOException e) {
-                    LOGGER.error("Failed to close zip filesystem for pack: {}", name, e);
+                    LOGGER.error("Failed to close zip filesystem for pack: {} ({})", name, getSourceDescription(), e);
                 }
             }
         }

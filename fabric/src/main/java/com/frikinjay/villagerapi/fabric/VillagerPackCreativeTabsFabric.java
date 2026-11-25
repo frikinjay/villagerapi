@@ -1,7 +1,7 @@
 package com.frikinjay.villagerapi.fabric;
 
 import com.frikinjay.villagerapi.registry.VAPICreativeTabs;
-import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
+import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -18,7 +18,7 @@ public class VillagerPackCreativeTabsFabric {
     public static void registerAllTabs() {
         VAPICreativeTabs.getAllTabs().forEach((namespace, tabData) -> {
             try {
-                CreativeModeTab tab = FabricItemGroup.builder()
+                CreativeModeTab tab = FabricCreativeModeTab.builder()
                         .icon(tabData::getIconItemStack)
                         .title(Component.translatable("itemGroup." + namespace + ".villagerpack_tab"))
                         .displayItems((context, entries) -> {

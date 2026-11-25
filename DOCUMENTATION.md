@@ -1,5 +1,9 @@
 # Villager Pack System Documentation
 
+> This page is out of date. Use the page for your Minecraft version instead:
+> - [Minecraft 26.1.2, 26.2, 26.3 and 26.4](DOCUMENTATION_26_1.md)
+> - [Minecraft 1.21.1 and 1.21.11](DOCUMENTATION_1_21_1.md)
+
 A data-driven framework for creating custom villager professions, types, trades, and biome mappings. Just drop JSON files in the `villagerpacks` folder—no code required.
 
 ---

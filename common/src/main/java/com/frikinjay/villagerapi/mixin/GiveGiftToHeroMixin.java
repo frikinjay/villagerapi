@@ -20,7 +20,7 @@ public abstract class GiveGiftToHeroMixin {
     @Final
     @Shadow
     @Mutable
-    private static Map<VillagerProfession, ResourceKey<LootTable>> GIFTS;
+    private static Map<ResourceKey<VillagerProfession>, ResourceKey<LootTable>> GIFTS;
 
     @Inject(method = "<clinit>", at = @At("TAIL"))
     private static void makeGiftsMutable(CallbackInfo ci) {

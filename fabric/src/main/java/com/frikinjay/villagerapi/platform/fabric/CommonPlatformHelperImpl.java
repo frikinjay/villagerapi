@@ -22,6 +22,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
+import static com.frikinjay.villagerapi.VillagerAPI.LOGGER;
+
 public class CommonPlatformHelperImpl {
 
     public static Supplier<Block> registerWorkstationBlock(String namespace, String name, Supplier<Block> blockSupplier) {
@@ -37,6 +39,14 @@ public class CommonPlatformHelperImpl {
         Identifier id = Identifier.fromNamespaceAndPath(namespace, name);
         ResourceKey<Item> resourceKey = ResourceKey.create(Registries.ITEM, id);
         Item registeredItem = Registry.register(BuiltInRegistries.ITEM, resourceKey, workstationItem);
+        return () -> registeredItem;
+    }
+
+    public static Supplier<Item> registerMapItem(String namespace, String name, Supplier<Item> item) {
+        Item mapItem = item.get();
+        Identifier id = Identifier.fromNamespaceAndPath(namespace, name);
+        ResourceKey<Item> resourceKey = ResourceKey.create(Registries.ITEM, id);
+        Item registeredItem = Registry.register(BuiltInRegistries.ITEM, resourceKey, mapItem);
         return () -> registeredItem;
     }
 
@@ -91,12 +101,30 @@ public class CommonPlatformHelperImpl {
 
     public static Map<String, Path> getAllModRootPaths() {
         Map<String, Path> modPaths = new HashMap<>();
-        net.fabricmc.loader.api.FabricLoader.getInstance().getAllMods().forEach(mod -> {
-            List<Path> roots = mod.getRootPaths();
-            if (!roots.isEmpty()) {
-                modPaths.put(mod.getMetadata().getId(), roots.getFirst());
+
+        FabricLoader.getInstance().getAllMods().forEach(container -> {
+            try {
+                String modId = container.getMetadata().getId();
+
+                // Get root paths - Fabric mods can have multiple root paths
+                List<Path> roots = container.getRootPaths();
+
+                if (!roots.isEmpty()) {
+                    // Use the first root path
+                    modPaths.put(modId, roots.getFirst());
+                    LOGGER.debug("Added mod root path for {}: {}", modId, roots.getFirst());
+                }
+            } catch (UnsupportedOperationException e) {
+                // NESTED mods dont have easily accessible paths and should be skipped
+                LOGGER.debug("Skipping nested mod container (no accessible paths): {}",
+                        container.getMetadata().getId());
+            } catch (Exception e) {
+                LOGGER.debug("Failed to get root path for mod {}: {}",
+                        container.getMetadata().getId(), e.getMessage());
             }
         });
+
+        LOGGER.debug("Loaded {} mod root paths for villagerpack scanning", modPaths.size());
         return modPaths;
     }
 }

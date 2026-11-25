@@ -1,6 +1,6 @@
-# VillagerAPI Villager Pack Documentation (Minecraft 1.21.1)
+# VillagerAPI Villager Pack Documentation (Minecraft 1.21.1 and 1.21.11)
 
-This page is for the Minecraft 1.21.1 version of VillagerAPI. A few things work differently from newer Minecraft versions, mainly how trades and explorer maps are built, so use this page and not the one for 26.1 and newer.
+This page is for the Minecraft 1.21.1 and 1.21.11 versions of VillagerAPI. A few things work differently from newer Minecraft versions, mainly how trades and explorer maps are built, so use this page and not the [one for 26.1.2 and newer](DOCUMENTATION_26_1.md). The 1.21.11 version is built from the 1.21.1 one and works the same way; the few differences are listed in [Minecraft 1.21.11](#minecraft-12111).
 
 VillagerAPI lets you add villager professions, workstations, villager types, trades, explorer maps, hero gifts and biome mappings using nothing but JSON files and textures. You put them in a villager pack, drop the pack into your instance, and the mod handles the registration and datapack side for you.
 
@@ -11,6 +11,7 @@ This page covers the pack format, how packs are loaded, and the parts that tend 
 ## Contents
 
 - [Quick Start](#quick-start)
+- [Minecraft 1.21.11](#minecraft-12111)
 - [Where Packs Are Loaded From](#where-packs-are-loaded-from)
 - [Pack Layout](#pack-layout)
 - [villagerapi_config.json](#villagerapi_configjson)
@@ -26,6 +27,7 @@ This page covers the pack format, how packs are loaded, and the parts that tend 
 - [Overriding Vanilla and Other Mods' Trades](#overriding-vanilla-and-other-mods-trades)
 - [Biome Trades](#biome-trades)
 - [Hero Gifts](#hero-gifts)
+- [Wandering Trader](#wandering-trader)
 - [Biome Mappings](#biome-mappings)
 - [Village Types](#village-types)
 - [Village Structures](#village-structures)
@@ -49,6 +51,28 @@ This page covers the pack format, how packs are loaded, and the parts that tend 
 4. Add a `pack.mcmeta` if your pack has `data/` or `assets/` folders. Trades, professions and the rest of `villagers/` work without one.
 5. Add your content under `villagers/`, `assets/` and `data/` as described below.
 6. Launch the game and check the log. VillagerAPI prints every pack it found and anything wrong with it.
+
+---
+
+## Minecraft 1.21.11
+
+VillagerAPI for 1.21.11 is built from the 1.21.1 version, so everything on this page works the same on both, including the older `buy_a` / `sell` trade format. Where Minecraft itself changed between the two versions, your pack follows the version it's for:
+
+- **pack.mcmeta.** 1.21.11 uses `min_format` and `max_format`. See [pack.mcmeta](#packmcmeta).
+- **Profession names.** The translation key includes the namespace: `entity.minecraft.villager.{namespace}.{name}`, for example `entity.minecraft.villager.morevillagers.enderian`. On 1.21.1 it's `entity.minecraft.villager.{name}`. A pack for both versions can simply have both keys.
+- **Workstation items.** Like every item since Minecraft 1.21.4, a workstation needs an item definition at `assets/{namespace}/items/{name}.json` next to its item model:
+
+  ```json
+  {
+    "model": {
+      "type": "minecraft:model",
+      "model": "morevillagers:item/purpur_altar"
+    }
+  }
+  ```
+
+- **Components and loot functions** use 1.21.11's formats wherever Minecraft changed them, in trades, gifts and loot tables alike.
+- **Wandering trader.** 1.21.11 has a `buying` pool, so the trader picks 2 trades from `buying`, 2 from `uncommon` and 5 from `common`. See [Wandering Trader](#wandering-trader).
 
 ---
 
@@ -79,6 +103,7 @@ villagerpacks/my_pack/
 │   ├── trades/                    trades per profession
 │   ├── biome_trades/              trades limited to certain villager types
 │   ├── gifts/                     hero of the village gifts
+│   ├── wandering_trader/          wandering trader trades
 │   ├── structure_tags/            explorer map definitions
 │   ├── biome_mappings/            biome to villager type mappings
 │   ├── village_types/             new villages copied from existing ones
@@ -176,6 +201,20 @@ For 1.21.1 the data pack format is 48 and the resource pack format is 34. Declar
 }
 ```
 
+1.21.11 reads `min_format` and `max_format` instead. This is what More Villagers uses, and it works on both versions:
+
+```json
+{
+  "pack": {
+    "description": "My Villager Pack",
+    "pack_format": 48,
+    "min_format": 38,
+    "max_format": 1000,
+    "supported_formats": [38, 1000]
+  }
+}
+```
+
 ---
 
 ## How Packs Are Loaded
@@ -247,6 +286,7 @@ The block itself has no look or drops until you give it some:
 - Blockstate: `assets/{namespace}/blockstates/{name}.json`
 - Block model: `assets/{namespace}/models/block/{name}.json`
 - Item model: `assets/{namespace}/models/item/{name}.json`
+- On 1.21.11, also an item definition: `assets/{namespace}/items/{name}.json`. See [Minecraft 1.21.11](#minecraft-12111).
 - Textures: `assets/{namespace}/textures/block/...` (16x16)
 - Loot table so it drops itself: `data/{namespace}/loot_table/blocks/{name}.json`
 - Mining tag, usually `data/minecraft/tags/block/mineable/axe.json`
@@ -342,7 +382,7 @@ The example registers `morevillagers:enderian`. If the POI type can't be found, 
 
 Each profession gets trade levels 1 to 5, novice to master. Its trades come from `villagers/trades/`, see [Trades](#trades).
 
-The profession's display name uses the translation key `entity.minecraft.villager.{name}`. On 1.21.1 the key doesn't include the namespace, so two professions with the same name in different packs share a display name. Give your professions names that are unlikely to clash.
+The profession's display name uses the translation key `entity.minecraft.villager.{name}`. On 1.21.1 the key doesn't include the namespace, so two professions with the same name in different packs share a display name. Give your professions names that are unlikely to clash. On 1.21.11 the key is `entity.minecraft.villager.{namespace}.{name}`.
 
 Textures:
 
@@ -498,7 +538,7 @@ Each trade uses Minecraft's own villager trade format, so any field vanilla supp
 | `gives` | Yes | Item the player gets. `id`, optional `count`, optional `components`. |
 | `max_uses` | No | Uses before the villager needs to restock. |
 | `xp` | No | Villager experience gained per trade. |
-| `reputation_discount` | No | How much the player's reputation lowers the price. |
+| `reputation_discount` | No | How much demand and the player's reputation change the price. Defaults to 0.05, the same as vanilla's own trades. Use 0 for a price that never changes. |
 | `merchant_predicate` | No | A loot condition the villager must meet to offer the trade. Written in 1.21.1's loot condition format. |
 | `given_item_modifiers` | No | Item functions applied to the item the player gets. See below. |
 | `trade_list_weight` | No | How likely this trade is to be picked when the level uses `trade_list_amount` or `trade_list_max`. Defaults to 1. Zero or a negative number means it's never picked. |
@@ -508,6 +548,8 @@ Counts and other numbers can be plain numbers or number providers, the same as v
 ```json
 "count": { "type": "minecraft:uniform", "min": 5, "max": 10 }
 ```
+
+A trade can't ask for more of an item than fits in one stack. A higher count, for example 24 snowballs when they stack to 16, is lowered to one full stack, the same way Minecraft handles it on 26.x.
 
 `merchant_predicate` uses Minecraft 1.21.1's loot condition format, where the condition type goes in `"condition"`. If you write `"type"` instead, as newer Minecraft versions do, it's converted for you. Other parts of newer condition syntax aren't converted, so a predicate copied from a 26.x pack may fail to load. The log names the trade if it does.
 
@@ -637,7 +679,7 @@ Trades written for earlier versions of VillagerAPI still work. A trade that has 
 | `sell` | Item the player gets, in the same form, or one of the special kinds below. |
 | `max_uses` | Uses before the villager needs to restock. |
 | `xp` | Villager experience gained per trade. |
-| `price_multiplier` | How much the player's reputation lowers the price. |
+| `price_multiplier` | How much demand and the player's reputation change the price. Defaults to 0.05. |
 
 `sell` can also be an object with an `item_type` for trades that need special handling:
 
@@ -862,6 +904,95 @@ On NeoForge, also add the gift to NeoForge's data map, because NeoForge reads he
 ```
 
 It's harmless to include this file on Fabric too, so one pack can serve both loaders.
+
+---
+
+## Wandering Trader
+
+**Path:** `villagers/wandering_trader/{any name}.json`
+
+Villager packs can change what the wandering trader buys and sells: add trades, add whole new pools, change how many trades a pool offers, remove trades for certain items, or replace vanilla's trades entirely. Any file name works, and subfolders are fine. Without such a file, the wandering trader is left exactly as vanilla makes it.
+
+```json
+{
+  "replace": false,
+  "remove": ["minecraft:pufferfish_bucket", "minecraft:nautilus_shell"],
+  "pools": {
+    "common": {
+      "amount": 6,
+      "trades": [
+        {
+          "wants": { "id": "minecraft:emerald", "count": 3 },
+          "gives": { "id": "minecraft:cherry_sapling" },
+          "max_uses": 8,
+          "xp": 1
+        }
+      ]
+    },
+    "uncommon": {
+      "replace": true,
+      "trades": [
+        {
+          "wants": { "id": "minecraft:emerald", "count": 6 },
+          "gives": { "id": "minecraft:nautilus_shell" },
+          "max_uses": 4,
+          "xp": 1
+        }
+      ]
+    },
+    "my_pack:festive": [
+      {
+        "wants": { "id": "minecraft:emerald", "count": 5 },
+        "gives": { "id": "minecraft:cake" },
+        "max_uses": 2,
+        "xp": 1
+      }
+    ]
+  }
+}
+```
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `replace` | `false` | When `true`, all of vanilla's wandering trader trades are dropped and only villager pack trades are left. |
+| `remove` | none | A list of item IDs. Every wandering trader trade that sells or asks for one of these items is left out. |
+| `pools` | none | The pools the trader picks its trades from, by name. |
+
+### Pools
+
+Each wandering trader picks a number of trades from every pool:
+
+| Pool | 1.21.1 | 1.21.11 |
+|------|--------|---------|
+| `buying` (the trader buys these items from the player) | 2 | 2 |
+| `uncommon` | 1 | 2 |
+| `common` | 5 | 5 |
+
+On 1.21.1, vanilla has no buying pool, so `buying` only holds villager pack trades. With the trade rebalance experiment turned on, 1.21.1 uses that experiment's pools and amounts instead, the same names as 1.21.11.
+
+A pool is either a list of trades, or an object:
+
+| Field | Default | Notes |
+|-------|---------|-------|
+| `trades` | none | Trades added to the pool, in the same format as [villager trades](#trade-fields), including the [older format](#older-trade-format) with `buy_a` and `sell`. |
+| `amount` | the pool's own | How many trades the trader picks from this pool. |
+| `replace` | `false` | When `true`, vanilla's trades are dropped from this pool only. |
+
+Any other name, such as `my_pack:festive` above, makes a new pool. A new pool without an `amount` gives all of its trades to every wandering trader. Vanilla pool names can also be written with their namespace, like `minecraft:common`.
+
+### Several packs
+
+Files are read in [pack order](#pack-order-and-villagerpacks_orderjson). `replace` and `remove` from any pack apply, the trades from all packs are added together, and the first pack that sets a pool's `amount` decides it.
+
+### Notes
+
+- `remove` matches the items of the finished trade. Explorer maps are `minecraft:filled_map`, so use that ID to remove map trades. `minecraft:map` only matches blank maps.
+- An item in `remove` also removes trades for it that other villager packs add.
+- If a trade can't be made, for example a map with no structure nearby, the trader picks another one from the same pool instead.
+- Wandering trader trades that other mods add to vanilla's trade table are kept, and `remove` works on them too.
+- The server log lists every pool a villager pack adds, so a misspelled vanilla pool name is easy to spot.
+- The files are read when the world or server starts. Changes need a restart, not just `/reload`.
+- Trade viewers such as Just Enough Resources don't show these changes.
 
 ---
 
@@ -1098,7 +1229,7 @@ Two Python scripts that make block-swapped copies of structure files, for exampl
 
 | What | Key |
 |------|-----|
-| Profession | `entity.minecraft.villager.{profession}` |
+| Profession | `entity.minecraft.villager.{profession}` on 1.21.1, `entity.minecraft.villager.{namespace}.{profession}` on 1.21.11 |
 | Workstation | `block.{namespace}.{name}` |
 | Creative tab | `itemGroup.{namespace}.villagerpack_tab` |
 | Map names | Whatever key you used in the trade's `set_name` |

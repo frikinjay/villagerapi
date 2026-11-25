@@ -8,15 +8,8 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
-/**
- * Centralized helper for common registry operations across all VAPI registry classes.
- * Reduces code duplication and provides consistent error handling.
- */
 public class RegistryHelper {
 
-    /**
-     * Generic storage for dynamic registrations with lazy initialization
-     */
     public static class DynamicRegistry<T> {
         private final Map<String, Supplier<T>> entries = new HashMap<>();
         private final String registryName;
@@ -51,7 +44,7 @@ public class RegistryHelper {
     }
 
     /**
-     * Registers entries from pack data with standardized error handling
+     * Registers entries from pack data and
      *
      * @param data The JSON data map from packs
      * @param registryName Name for logging

@@ -1,5 +1,5 @@
 plugins {
-    id 'com.gradleup.shadow'
+    id 'com.gradleup.shadow' version "9.2.2"
     id 'io.github.0ffz.github-packages' version '[1,2)'
 }
 
@@ -41,16 +41,24 @@ repositories {
 }
 
 dependencies {
-    modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
+    implementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
 
-    modImplementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_api_version"
+    implementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_api_version"
+
+    //api include("me.shedaniel.cloth:cloth-config-fabric:${rootProject.cloth_fabric_version}") {
+    //    exclude(group: "net.fabricmc.fabric-api")
+    //}
+
+    //implementation "com.terraformersmc:modmenu:${project.modmenu_version}", {
+    //    exclude module: "fabric-api"
+    //}
 
     //implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${project.mixin_extra_version}"))
 
     //modImplementation "com.aetherteam.aether:aether:${project.aether_version_fabric}"
 
-    common(project(path: ':common', configuration: 'namedElements')) { transitive false }
-    shadowBundle project(path: ':common', configuration: 'transformProductionFabric')
+    common(project(path: ":common")) { transitive false }
+    shadowBundle(project(path: ":common", configuration: "transformProductionFabric")) { transitive false }
 }
 
 processResources {
@@ -61,11 +69,25 @@ processResources {
     }
 }
 
-shadowJar {
-    configurations = [project.configurations.shadowBundle]
-    archiveClassifier = 'dev-shadow'
+jar {
+    archiveClassifier = "raw" // Mark the default jar as raw
 }
 
-remapJar {
-    inputFile.set shadowJar.archiveFile
+shadowJar {
+    dependsOn(jar)
+
+    // Remove default source set inclusion to prevent overwriting Loom-modified files (like fabric.mod.json)
+    mainSpec.sourcePaths.clear()
+
+    // Unpack jar output to preserve Loom's Jar-in-Jar metadata
+    from(zipTree(jar.archiveFile))
+
+    configurations = [project.configurations.shadowBundle]
+
+    // shadowJar becomes the main unclassified artifact
+    archiveClassifier = null
 }
+
+// Ensure the standard jar task is replaced by the shadowJar
+tasks.build.dependsOn shadowJar
+
